@@ -1,0 +1,227 @@
+---
+title: "Sporadic colorectal cancer SKAT"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+editor_options: 
+  chunk_output_type: console
+---
+
+**Started**: Alexey Larionov, 14Jul2020  
+**Last updated**: Rofaida Desoki, 17Jul20
+
+# Summary  
+
+Sporadic colorectal cancer: SKAT burden and variance-aggregation tests  
+
+<style>
+pre {
+  overflow-x: auto;
+}
+pre code {
+  word-wrap: normal;
+  white-space: pre;
+}
+</style>
+
+```{r}
+
+options(width = 999)
+
+```
+
+# Start section
+
+```{r}
+
+# Time
+Sys.time()
+
+# Clean up
+rm(list=ls())
+graphics.off()
+
+# Additional options
+options(stringsAsFactors = F)
+
+# Working folders
+base_folder <- "/home/rdesoki/re_gecip/inherited_cancer_predisposition/rofaida/Rproject"
+
+scripts_folder <- file.path(base_folder,"scripts","s09_sporadic_colon_cancer")
+setwd(scripts_folder)
+
+data_folder <- file.path(base_folder,"data","s09_sporadic_colon_cancer")
+
+plink_folder <- file.path(data_folder,"plink")
+covars_sets_folder <- file.path(data_folder,"covars_sets")
+ssd_folder <- file.path(data_folder,"ssd")
+
+# Required library
+library(SKAT)
+
+```
+
+# Read SSD.INFO  
+
+```{r}
+
+# Source files
+File.SSD = file.path(ssd_folder,"dataset.ssd")
+File.Info = file.path(ssd_folder,"dataset.info")
+
+# Read SSD.INFO
+SSD.INFO <-Open_SSD(File.SSD, File.Info)
+
+# Explore SSD.INFO
+SSD.INFO
+
+# Clean-up
+rm(File.SSD, File.Info)
+
+```
+
+# Read fam and cov
+
+```{r}
+
+File.Fam = file.path(plink_folder,"dataset.fam")
+File.Cov = file.path(covars_sets_folder,"dataset.cov")
+
+fam_cov.df <- Read_Plink_FAM_Cov(File.Fam, File.Cov, Is.binary=TRUE, cov_header=TRUE)
+
+dim(fam_cov.df)
+head(fam_cov.df)
+table(fam_cov.df$Phenotype)
+
+rm(File.Fam, File.Cov)
+
+```
+
+# Null model
+
+Becomes large (~4GB) with 10^5 resampling
+
+```{r}
+
+obj<-SKAT_Null_Model(Phenotype ~ sex + age + pc1 + pc2 + pc3 + pc4 + pc5 + pc6, 
+                     data=fam_cov.df, out_type="D")
+                     #, n.Resampling=10000)
+
+rm(fam_cov.df)
+
+```
+
+# Burden test
+
+```{r}
+
+# Calculate p-values using the dafault Hybrid approach
+out.burden <- SKATBinary.SSD.All(SSD.INFO, obj, method="Burden")
+#warnings()
+
+# Explore out.burden object
+attributes(out.burden)
+
+# Extract data frame with results
+burden.df <- out.burden$results
+
+# Add multiple-testing correction
+p_adj <- p.adjust(burden.df$P.value, method="fdr")
+burden.df <- data.frame(burden.df,p_adj)
+burden.df
+
+# Genes passing Family-Wise-Error-Rate 0.05 from resampling
+# Resampling_FWER(out.burden,FWER=0.05)
+
+# Number of tests that might be used for Bonferroni correction
+# Get_EffectiveNumberTest(out.burden$results$MAP, alpha=0.05)
+
+# MAP-adjusted QQ-plot
+QQPlot_Adj(out.burden$results$P.value, out.burden$results$MAP,
+           main="Sporadic Colon Cancer\nBurden test", Is.unadjsted = F)
+
+# Clean-up
+rm(p_adj)
+
+```
+
+# Variance-aggregation test
+
+```{r}
+
+out.skat<-SKATBinary.SSD.All(SSD.INFO, obj, method="SKAT")
+#warnings()
+
+# Explore out.burden object
+attributes(out.skat)
+
+# Extract data frame with results
+skat.df <- out.skat$results
+
+# Add multiple-testing correction
+p_adj <- p.adjust(skat.df$P.value, method="fdr")
+skat.df <- data.frame(skat.df,p_adj)
+skat.df
+
+# Genes passing Ffamily-Wise-Eerror-Rate 0.05 from resampling
+# Resampling_FWER(out.skat,FWER=0.05)
+
+# Number of tests that might be used for Bonferroni correction
+# Get_EffectiveNumberTest(out.skat$results$MAP, alpha=0.05)
+
+# MAP-adjusted QQ-plot
+QQPlot_Adj(out.skat$results$P.value, out.skat$results$MAP,
+           main="Sporadic Colon Cancer\nVaraince-aggregation test", Is.unadjsted = F)
+
+# Clean-up
+rm(obj, SSD.INFO, p_adj)
+
+```
+
+# Write results to text files
+
+```{r}
+
+# Write results of burden tests
+file_name <- file.path(data_folder,"s05_burden.txt")
+write.table(out.burden$results, file = file_name, sep="\t", 
+            quote = FALSE, row.names = FALSE, col.names = TRUE)
+
+# Write results of variance-aggregation tests
+file_name <- file.path(data_folder,"s05_skat.txt")
+write.table(out.skat$results, file = file_name, sep="\t",
+            quote = FALSE, row.names = FALSE, col.names = TRUE)
+
+# Clean-up
+rm(file_name)
+
+```
+
+# Close SSD
+
+Recomended by SKAT
+
+```{r}
+
+Close_SSD()
+
+```
+
+Save results
+
+```{r}
+
+save.image(file.path(data_folder,"s05_SKAT.RData"))
+
+```
+
+# End section 
+
+```{r}
+
+ls()
+sessionInfo()
+Sys.time()
+
+```

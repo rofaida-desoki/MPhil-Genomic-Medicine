@@ -1,0 +1,496 @@
+---
+title: "Clean LabKey tables"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+editor_options: 
+  chunk_output_type: console
+---
+
+**Last updated**: Rofaida, 13Mar2020  
+
+# Summary  
+
+### Data clean-up by removal of inconsistently annotated outliers  
+
+A proper formalised data clean-up includes  
+
+- detailed data exploration  
+- issuing and resolving formal queries to the data-collection team  
+- etc.  
+
+It is a time and labour consuming process.  Because of the large numbers of participants in GEL, any participant with inconsistencies in data (e.g. irregularly duplicated IDs, inappropriate age etc) will be removed, instead of clarifying the issue.  
+
+### This Script:  
+
+- checks that all analysed participants have current consent  
+- keeps only participants present in VCF file  
+- explores selected fields  
+- removes participants with obvious irregularities (such as participants entered with multiple IDs, or with mised diagnosis etc)  
+- keeps only participants of european ancestry  
+- merges and updates some tables  
+
+# Start section
+
+<style>
+pre{
+  overflow-x: auto;
+}
+pre code{
+  word-wrap: normal;
+  white-space: pre;
+}
+</style>
+
+```{r}
+options(width=999)
+```
+
+```{r}
+
+# Time
+Sys.time()
+
+# Clean up
+rm(list=ls())
+graphics.off()
+
+# Dont use factors by default
+options(stringsAsFactors = F)
+
+# Folders
+base_folder <- "/home/rdesoki/re_gecip/inherited_cancer_predisposition/rofaida/Rproject"
+
+scripts_folder <- paste(base_folder,"scripts","s01_import_Labkey_tables",sep="/")
+setwd(scripts_folder)
+
+data_folder <- paste(base_folder,"data","s01_import_Labkey_tables",sep="/")
+
+# Libraries
+library(dplyr)
+library(ggplot2)
+
+```
+
+# load data  
+
+```{r}
+
+load(paste(data_folder,"s01_import_Labkey_tables.RData", sep="/"))
+
+ls()
+
+dim(aggregated_vcf.df)
+dim(participant.df)
+dim(sporadic_cancers.df)
+dim(rare_diseases.df)
+dim(cancer_diagnosis_date.df)
+
+```
+
+# Make sure that all participants in aggregated_vcf.df currently give consent  
+
+see https://cnfl.extge.co.uk/pages/viewpage.action?pageId=113194986 (accessed outside GEL, 21Feb2020)
+
+```{r}
+
+# List of samples from the VCF file, which still retain valid consent
+v8_consented_samples <- scan("/home/rdesoki/gel_data_resources/main_programme/aggregated_illumina_gvcf/GRCH38/20190228/docs/main_programme_v8_samples.txt", what="character")
+
+sum(! aggregated_vcf.df$platekey %in% v8_consented_samples)
+
+rm(v8_consented_samples)
+
+```
+
+# Remove four VCF samples that have different plate-keys for the same participant_id  
+
+In the preliminary analysis it was shown that these 4 samples were not from Sporadic Cancers or RD Tumour Syndromes  
+
+```{r}
+
+# Get duplicates ids
+indices_for_duplicates <- duplicated(aggregated_vcf.df$participant_id)
+sum(indices_for_duplicates)
+
+duplicated_ids <- aggregated_vcf.df[indices_for_duplicates,"participant_id"]
+duplicated_ids
+
+# Get all (2nd and later) duplicates id-s
+indices_for_all_duplicates <- aggregated_vcf.df$participant_id %in% duplicated_ids
+sum(indices_for_all_duplicates)
+
+# Remove the duplicates
+aggregated_vcf.df <- aggregated_vcf.df[!indices_for_all_duplicates,]
+
+# Clean-up
+rm(indices_for_duplicates, duplicated_ids, indices_for_all_duplicates)
+
+```
+
+# Merge participant.df and aggregated_vcd.df  
+
+```{r}
+
+# Check that there is no participant_id duplicates in any of the tables  
+sum(duplicated(participant.df$participant_id))
+sum(duplicated(aggregated_vcf.df$participant_id))
+
+# Merge tables by participant_id
+dim(aggregated_vcf.df)
+dim(participant.df)
+vcf_participants.df <- left_join(aggregated_vcf.df, participant.df, by="participant_id")
+dim(vcf_participants.df)
+colnames(vcf_participants.df)
+
+# Clean-up
+rm(aggregated_vcf.df, participant.df)
+
+```
+
+# Remove participants with duplicated ID-s
+
+These are the participants that were registered several times under different IDs (listed in the duplicated_participant_id column) 
+
+```{r}
+
+dim(vcf_participants.df)
+
+double_registered <- !is.na(vcf_participants.df$duplicated_participant_id)
+sum(double_registered)
+
+vcf_participants.df <- vcf_participants.df[!double_registered,]
+
+vcf_participants.df <- vcf_participants.df %>% 
+  select(-duplicated_participant_id)
+
+dim(vcf_participants.df)
+
+rm(double_registered)
+
+```
+
+# Filter participants by the age at consent  
+
+Remove participants younger than 1 year and older than 100 years at the time of consent  
+
+### Calculate age of consent  
+
+```{r}
+
+vcf_participants.df <- vcf_participants.df %>% 
+  mutate(age_at_consent = as.numeric(format(date_of_consent,'%Y')) - year_of_birth)
+
+sum(is.na(vcf_participants.df$age_at_consent))
+
+hist(vcf_participants.df$age_at_consent, lab=T, ylim=c(0,45000))
+
+sum(vcf_participants.df$age_at_consent < 1)
+sum(vcf_participants.df$age_at_consent > 100)
+
+```
+
+### Explore old ages at consent 
+
+older than 100 years old  
+
+```{r}
+
+vcf_participants.df %>% 
+  filter(age_at_consent > 100) %>% 
+  select(year_of_birth, date_of_consent, age_at_consent) %>% 
+  arrange(age_at_consent)
+
+```
+
+### Consent age younger than 1 year old  
+
+```{r}
+
+consented_newborns.df <- vcf_participants.df %>% 
+  filter(age_at_consent < 1) %>% 
+  select(participant_id)
+
+```
+
+### Explore newborn consents in Sporadic Cancers and RD Tumour syndromes
+Only Tumour Syndromes are of interest in Rare Diseases in this project 
+
+```{r}
+
+sporadic_cancers.df %>% 
+  filter(participant_id %in% consented_newborns.df$participant_id)
+
+rd_tumour_syndromes.df <- rare_diseases.df %>% 
+  filter(normalised_disease_group == "Tumour syndromes")
+dim(rd_tumour_syndromes.df)
+
+rd_tumour_syndromes.df %>% 
+  filter(participant_id %in% consented_newborns.df$participant_id) %>% 
+  select(normalised_specific_disease)
+
+rm(rd_tumour_syndromes.df,consented_newborns.df)
+
+```
+
+
+### Remove participants with newborn and old consents  
+
+```{r}
+
+vcf_participants.df <- vcf_participants.df %>% 
+  filter(age_at_consent >=1, age_at_consent <=100)
+
+hist(vcf_participants.df$age_at_consent)
+
+dim(vcf_participants.df)
+
+```
+
+# Explore the age of onset in Rare diseases
+
+It is likely that there is a small proportion of data entry errors in RD age of onset. They will be dealt with later: after selecting controls (unaffected parents of RD patients still needs to be collected, even if the onset data was not recorded for the probands).  
+
+```{r}
+
+# About 12% of all RD have missed age of onset (NA)
+sum(is.na(rare_diseases.df$normalised_age_of_onset))
+sum(is.na(rare_diseases.df$normalised_age_of_onset)) / nrow(rare_diseases.df)
+
+# About 40% of all RD have age of onset within the 1st year of life  
+sum(rare_diseases.df$normalised_age_of_onset == 0, na.rm=T)
+sum(rare_diseases.df$normalised_age_of_onset == 0, na.rm=T) / nrow(rare_diseases.df)
+
+# About 9% of RD Tumour Syndromes (161/1816) have reported age of onset within the 1st year of life 
+rare_diseases.df %>% 
+  filter(normalised_disease_group=="Tumour syndromes") %>% 
+  group_by(normalised_age_of_onset == 0) %>% 
+  summarise(counts=n())
+
+# Many cases in RD Tumour Syndromes with age of onset == 0 are mistakes 
+# (e.g. familial breast cancers with age of onset == 0 ) 
+# Explore how many newborns in each tumour syndrome
+rare_diseases.df %>% 
+  filter(normalised_disease_group=="Tumour syndromes" & normalised_age_of_onset == 0) %>% 
+  group_by(normalised_specific_disease) %>% 
+  summarise(counts=n()) %>% 
+  arrange(desc(counts))
+
+# This is total counts of cases for RD Tumour Syndromes for comparison
+rare_diseases.df %>% 
+  filter(normalised_disease_group=="Tumour syndromes") %>% 
+  group_by(normalised_specific_disease) %>% 
+  summarise(counts=n()) %>% 
+  arrange(desc(counts))
+
+# Age of onset distributions for some RD Tumour Syndromes
+rare_diseases.df %>% 
+  filter(normalised_specific_disease=="Familial breast and or ovarian cancer") %>% 
+ggplot(aes(normalised_age_of_onset)) +
+  geom_histogram(fill="blue", alpha=0.3, color="black", size=0.1) +
+  ggtitle("Familial breast and or ovarian cancer")
+
+rare_diseases.df %>% 
+  filter(normalised_specific_disease=="Multiple Tumours") %>% 
+ggplot(aes(normalised_age_of_onset)) +
+  geom_histogram(fill="blue", alpha=0.3, color="black", size=0.1) +
+  ggtitle("Multiple Tumours")
+
+rare_diseases.df %>% 
+  filter(normalised_specific_disease=="Neurofibromatosis Type 1") %>% 
+ggplot(aes(normalised_age_of_onset)) +
+  geom_histogram(fill="blue", alpha=0.3, color="black", size=0.1) +
+  ggtitle("Neurofibromatosis Type 1")
+
+```
+
+# Explore RD diagnosis date
+
+```{r}
+
+sum(is.na(rare_diseases.df$diagnosis_date))
+sum(rare_diseases.df$diagnosis_date==0)
+
+rare_diseases.df %>% filter(diagnosis_date==0) # 1970-01-01 01:00:00
+
+rare_diseases.df %>% 
+  transmute(diagnosis_year=as.numeric(format(diagnosis_date,"%Y"))) %>% 
+ggplot(aes(diagnosis_year)) + 
+  geom_histogram(alpha=0.3, fill="blue", color="black", size=0.3) +
+  ggtitle("Rare Ddiseases")
+
+```
+
+# Explore cancer diagnosis date
+
+Date of diagnosis was recorded for only about half of Sporadic Cancer patients in the cancer_participants_tumour table. However, there is no obvious outliers in the year of diagnosis amongst those who were recorded.  
+
+There are multiple age of diagnosis for a small number of cases: this may happen when a participant genuinely has multiple tumours. However, we still remove these dates to avoid uncertainity about the diagnosis date. The age of diagnosis for Ca will be explored and decided further later.  
+
+```{r}
+
+# Check numbers of records
+nrow(sporadic_cancers.df)
+nrow(cancer_diagnosis_date.df)
+
+# Check for missed data
+sum(is.na(cancer_diagnosis_date.df))
+
+# Check for obvious data entry errors
+cancer_diagnosis_date.df %>% 
+  mutate(diagnosis_year=as.numeric(format(diagnosis_date,"%Y"))) %>% 
+ggplot(aes(diagnosis_year)) +
+  geom_histogram(alpha=0.3, fill="blue", color="black", size=0.5)
+
+# Check for duplicates
+sum(duplicated(cancer_diagnosis_date.df$participant_id))
+
+# Exclude duplicated dates of diagnosis
+duplicated_diagnoses.df <- cancer_diagnosis_date.df %>% 
+  filter(duplicated(participant_id))
+
+cancer_diagnosis_date.df <- cancer_diagnosis_date.df %>% 
+  filter(! participant_id %in% duplicated_diagnoses.df$participant_id)
+
+# Add date of diagnosis to sporadic cancer table  
+dim(sporadic_cancers.df)
+sum(duplicated(sporadic_cancers.df$participant_id))
+sporadic_cancers.df <- left_join(sporadic_cancers.df,cancer_diagnosis_date.df,by="participant_id")
+dim(sporadic_cancers.df)
+sum(duplicated(sporadic_cancers.df$participant_id))
+
+# Check missingness of diagnosis dates (again)
+sum(is.na(sporadic_cancers.df$diagnosis_date))
+sum(!is.na(sporadic_cancers.df$diagnosis_date))
+
+# Clean-up
+rm(cancer_diagnosis_date.df, duplicated_diagnoses.df)
+
+```
+
+# Keep only participants of european ancestry  
+
+```{r}
+
+vcf_participants.df <- vcf_participants.df %>% 
+  filter(pred_european_ancestries >= 0.9)
+dim(vcf_participants.df)
+
+vcf_participants.df %>% 
+  group_by(participant_ethnic_category) %>% 
+  summarise(counts=n()) %>% 
+  arrange(desc(counts))
+
+non_europeans <- c("Other Ethnic Groups: Any other ethnic group",
+                   "Mixed: White and Black Caribbean",
+                   "Mixed: Any other mixed background",
+                   "Mixed: White and Asian",
+                   "Mixed: White and Black African",
+                   "Asian or Asian British: Any other Asian background",
+                   "Asian or Asian British: Bangladeshi",
+                   "Black or Black British: Caribbean",
+                   "Asian or Asian British: Pakistani",
+                   "Black or Black British: Any other Black background")
+
+sum(vcf_participants.df$participant_ethnic_category %in% non_europeans)
+
+vcf_participants.df <- vcf_participants.df %>% 
+  filter(! participant_ethnic_category %in% non_europeans)
+
+dim(vcf_participants.df)
+
+vcf_participants.df %>% 
+  group_by(participant_ethnic_category) %>% 
+  summarise(counts=n()) %>% 
+  arrange(desc(counts))
+
+rm(non_europeans)
+
+```
+
+# Remove a case with missed disease information in Rare Diseases
+
+```{r}
+
+missed_disease_information <- is.na(rare_diseases.df$normalised_disease_group)
+sum(missed_disease_information)
+
+rare_diseases.df %>% 
+  filter(missed_disease_information) %>% 
+  select(participant_id,normalised_disease_group,normalised_disease_sub_group,normalised_specific_disease)
+
+rare_diseases.df <- rare_diseases.df[!missed_disease_information,]
+
+rm(missed_disease_information)
+
+```
+
+# Merge Cancer type and sub-tupe within Sporadic cancers table  
+
+```{r}
+
+sporadic_cancers.df <- sporadic_cancers.df %>% 
+  mutate(disease=paste(cancer_disease_type,cancer_disease_sub_type,sep="-"))
+
+str(sporadic_cancers.df)
+
+```
+
+# Ca and RD tables: keep only participants present in VCF  
+
+```{r}
+
+# Update cancers
+dim(sporadic_cancers.df)
+sporadic_cancers.df <- sporadic_cancers.df %>% 
+  filter(participant_id %in% vcf_participants.df$participant_id)
+dim(sporadic_cancers.df)
+
+# Update Rare Diseases
+dim(rare_diseases.df)
+rare_diseases.df <- rare_diseases.df %>% 
+  filter(participant_id %in% vcf_participants.df$participant_id)
+dim(rare_diseases.df)
+
+```
+
+### No participant_id overlap between Ca and RD
+
+Just a common sense check  
+
+```{r}
+
+length(intersect(sporadic_cancers.df$participant_id, rare_diseases.df$participant_id ))
+
+```
+
+# Final data check
+
+```{r}
+
+ls()
+
+dim(vcf_participants.df)
+dim(sporadic_cancers.df)
+dim(rare_diseases.df)
+
+```
+
+# Save  result
+
+```{r}
+
+save.image(file=paste(data_folder,"s02_clean_Labkey_tables.RData",sep="/"))
+
+```
+
+# Final section
+
+```{r}
+
+ls()
+sessionInfo()
+Sys.time()
+
+```

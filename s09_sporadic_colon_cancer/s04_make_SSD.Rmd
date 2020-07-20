@@ -1,0 +1,91 @@
+---
+title: "Make SKAT SSD files"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+editor_options: 
+  chunk_output_type: console
+---
+
+**Started**: Alexey Larionov, 14Jul2020  
+**Last updated**: Rofaida Desoki, 17Jul20 
+
+# Summary  
+
+Prepare SNP-Set-Data (SSD) file for SKAT analysis  
+
+<style>
+pre {
+  overflow-x: auto;
+}
+pre code {
+  word-wrap: normal;
+  white-space: pre;
+}
+</style>
+
+```{r}
+
+options(width = 999)
+
+```
+
+# Start section
+
+```{r}
+
+# Time
+Sys.time()
+
+# Clean up
+rm(list=ls())
+graphics.off()
+
+# Additional options
+options(stringsAsFactors = F)
+
+# Working folders
+base_folder <- "/home/rdesoki/re_gecip/inherited_cancer_predisposition/rofaida/Rproject"
+
+scripts_folder <- file.path(base_folder,"scripts","s09_sporadic_colon_cancer")
+setwd(scripts_folder)
+
+data_folder <- file.path(base_folder,"data","s09_sporadic_colon_cancer")
+
+plink_folder <- file.path(data_folder,"plink")
+covars_sets_folder <- file.path(data_folder,"covars_sets")
+
+ssd_folder <- file.path(data_folder,"ssd")
+dir.create(ssd_folder)
+
+# Required library
+#install.packages("SKAT")
+library(SKAT)
+
+```
+
+# Read data  
+
+```{r read_data}
+
+Generate_SSD_SetID(
+  File.Bed = file.path(plink_folder,"dataset.bed"),
+  File.Bim = file.path(plink_folder,"dataset.bim"),
+  File.Fam = file.path(plink_folder,"dataset.fam"),
+  File.SetID = file.path(covars_sets_folder,"dataset.SetID"),
+  File.SSD = file.path(ssd_folder,"dataset.ssd"),
+  File.Info = file.path(ssd_folder,"dataset.info")
+)
+
+```
+
+# Final section
+
+```{r final_section}
+
+ls()
+sessionInfo()
+Sys.time()
+
+```

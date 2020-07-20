@@ -1,0 +1,303 @@
+---
+title: "Select cases and controls"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+editor_options: 
+  chunk_output_type: console
+---
+
+**Started**:Alexey Larionov, 14Mar20
+**Last updated**: Rofaida, 24Mar20  
+
+# Summary  
+
+Select cases and controls basing on the preliminary exploration of data  
+
+# Start section
+
+<style>
+pre{
+  overflow-x: auto;
+}
+pre code{
+  word-wrap: normal;
+  white-space: pre;
+}
+</style>
+
+```{r}
+options(width=999)
+```
+
+```{r}
+
+# Time
+Sys.time()
+
+# Clean up
+rm(list=ls())
+graphics.off()
+
+# Dont use factors by default
+options(stringsAsFactors = F)
+
+# Folders
+base_folder <- "/home/rdesoki/re_gecip/inherited_cancer_predisposition/rofaida/Rproject"
+
+# Libraries
+library(dplyr)
+
+```
+
+# load data  
+
+```{r}
+
+load(paste(base_folder,"data","s02_explore_Labkey_data","s04_explore_controls.RData", sep="/"))
+
+scripts_folder <- paste(base_folder,"scripts","s03_select_sample",sep="/")
+
+
+data_folder <- paste(base_folder,"data","s03_select_sample",sep="/")
+dir.create(data_folder,showWarnings=F)
+
+ls()
+
+dim(vcf_participants.df)
+dim(sporadic_cancers.df)
+dim(rare_diseases.df)
+dim(unaffected_parents_idd.df)
+
+```
+
+# Select cases and controls
+
+### RD cases
+
+```{r}
+
+rare_diseases.df <- rare_diseases.df %>% 
+  filter(normalised_disease_group == "Tumour syndromes")
+
+dim(rare_diseases.df)
+
+```
+
+### Ca cases  
+
+```{r}
+
+breast <- sporadic_cancers.df$cancer_disease_type == "BREAST"
+colorectal <- sporadic_cancers.df$cancer_disease_type == "COLORECTAL"
+lung <- sporadic_cancers.df$cancer_disease_type == "LUNG"
+renal <- sporadic_cancers.df$cancer_disease_type == "RENAL"
+sarcoma <- sporadic_cancers.df$cancer_disease_type == "SARCOMA"
+endometrial <- sporadic_cancers.df$cancer_disease_type == "ENDOMETRIAL_CARCINOMA"
+ovarian <- sporadic_cancers.df$cancer_disease_type == "OVARIAN"
+prostate <- sporadic_cancers.df$cancer_disease_type == "PROSTATE"
+glioma <- sporadic_cancers.df$cancer_disease_type == "ADULT_GLIOMA"
+bladder <- sporadic_cancers.df$cancer_disease_type == "BLADDER"
+hepbil <- sporadic_cancers.df$cancer_disease_type == "HEPATOPANCREATOBILIARY"
+melanoma <- sporadic_cancers.df$cancer_disease_type == "MALIGNANT_MELANOMA"
+upgist <- sporadic_cancers.df$cancer_disease_type == "UPPER_GASTROINTESTINAL"
+
+ca_cases <- breast | colorectal | lung | renal | sarcoma | endometrial | ovarian | 
+            prostate | glioma | bladder | hepbil | melanoma | upgist
+
+sum(ca_cases)
+
+sporadic_cancers.df <- sporadic_cancers.df %>% 
+  filter(ca_cases)
+
+rm(breast,colorectal,lung,renal,sarcoma,endometrial,ovarian, 
+   prostate,glioma,bladder,hepbil,melanoma,upgist,ca_cases)
+
+```
+
+### Check for intersects
+
+Just in case  
+
+```{r}
+
+# Check for intersects
+intersect(sporadic_cancers.df$participant_id, rare_diseases.df$participant_id)
+intersect(sporadic_cancers.df$participant_id, unaffected_parents_idd.df$participant_id)
+intersect(rare_diseases.df$participant_id, unaffected_parents_idd.df$participant_id)
+
+```
+
+# Select cases and controls from **the VCF-participants**  
+
+### Keep "VCF-participants" variables only for cases and controls, add a column with their group info  
+
+```{r}
+
+vcf_ca.df <- vcf_participants.df %>% 
+  filter(participant_id %in% sporadic_cancers.df$participant_id) %>% 
+  mutate(group="sporadic_ca")
+dim(vcf_ca.df)
+
+vcf_rd.df <- vcf_participants.df %>% 
+  filter(participant_id %in% rare_diseases.df$participant_id) %>% 
+  mutate(group="rd_tumours")
+dim(vcf_rd.df)
+
+vcf_controls.df <- vcf_participants.df %>% 
+  filter(participant_id %in% unaffected_parents_idd.df$participant_id) %>% 
+  mutate(group="control")
+dim(vcf_controls.df)
+
+rm(vcf_participants.df)
+
+```
+
+### Merge **VCF-participants** of cases and controls into single data.frame  
+
+```{r}
+
+vcf_cases_controls.df <- rbind(vcf_ca.df, vcf_rd.df, vcf_controls.df)
+dim(vcf_cases_controls.df)
+
+sum(duplicated(vcf_cases_controls.df$participant_id))
+sum(duplicated(vcf_cases_controls.df$platekey))
+
+rm(vcf_ca.df, vcf_rd.df, vcf_controls.df)
+
+```
+
+# Merge **Ca**, **RD** and **Control** data to one table  
+
+Merging will be done by rbind() : so need to make the same columns in each table  
+
+### Prepare RD
+
+```{r}
+
+str(rare_diseases.df)
+
+rare_diseases.df <- rare_diseases.df %>% 
+  mutate(ca_diagnosis_date=as.Date(NA),
+         control_relationship_to_proband=NA, 
+         control_age_at_consent=NA) %>% 
+  select(participant_id, 
+         disease_group="normalised_disease_group", 
+         disease_sub_group="normalised_disease_sub_group", 
+         disease="normalised_specific_disease", 
+         rd_age_of_onset="normalised_age_of_onset", 
+         rd_diagnosis_date="diagnosis_date", 
+         ca_diagnosis_date, 
+         control_relationship_to_proband, 
+         control_age_at_consent)
+
+str(rare_diseases.df)
+
+```
+
+### Prepare Ca
+
+```{r}
+
+str(sporadic_cancers.df)
+
+sporadic_cancers.df <- sporadic_cancers.df %>% 
+  mutate(rd_age_of_onset=NA,
+         rd_diagnosis_date=as.Date(NA),
+         control_relationship_to_proband=NA, 
+         control_age_at_consent=NA) %>% 
+  select(participant_id, 
+         disease_group="cancer_disease_type", 
+         disease_sub_group="cancer_disease_sub_type", 
+         disease,
+         rd_age_of_onset,
+         rd_diagnosis_date,
+         ca_diagnosis_date="diagnosis_date",
+         control_relationship_to_proband,
+         control_age_at_consent) 
+
+str(sporadic_cancers.df)
+
+```
+
+### Prepare Controls
+
+```{r}
+
+str(unaffected_parents_idd.df)
+
+unaffected_parents_idd.df <- unaffected_parents_idd.df %>% 
+  mutate(disease_group=NA,
+         disease_sub_group=NA,
+         disease=NA,
+         rd_age_of_onset=NA,
+         rd_diagnosis_date=as.Date(NA),
+         ca_diagnosis_date=as.Date(NA)) %>% 
+  select(participant_id, 
+         disease_group, 
+         disease_sub_group, 
+         disease,
+         rd_age_of_onset,
+         rd_diagnosis_date,
+         ca_diagnosis_date,
+         control_relationship_to_proband="biological_relationship_to_proband",
+         control_age_at_consent="age_at_consent") 
+
+str(unaffected_parents_idd.df)
+
+```
+
+### Combime RD, Ca and Controls
+
+```{r}
+
+cases_controls.df <- rbind(rare_diseases.df, sporadic_cancers.df, unaffected_parents_idd.df)
+dim(cases_controls.df)
+str(cases_controls.df)
+
+rm(rare_diseases.df, sporadic_cancers.df, unaffected_parents_idd.df)
+
+```
+
+# Combine cases and controls with VCF data  
+
+Note that some participants have multiple diagnoses  
+
+```{r}
+
+dim(cases_controls.df)
+dim(vcf_cases_controls.df)
+
+sum(!vcf_cases_controls.df$participant_id %in% cases_controls.df$participant_id)
+sum(!cases_controls.df$participant_id %in% vcf_cases_controls.df$participant_id)
+
+sum(duplicated(vcf_cases_controls.df$participant_id))
+sum(duplicated(cases_controls.df$participant_id))
+
+participants.df <- left_join(cases_controls.df, vcf_cases_controls.df, by="participant_id")
+
+dim(participants.df)
+colnames(participants.df)
+
+rm(cases_controls.df, vcf_cases_controls.df)
+
+```
+
+# Save  result
+
+```{r}
+
+save.image(paste(data_folder,"s01_select_sample.RData",sep="/"))
+
+```
+
+# Final section
+
+```{r}
+
+ls()
+sessionInfo()
+Sys.time()
+
+```

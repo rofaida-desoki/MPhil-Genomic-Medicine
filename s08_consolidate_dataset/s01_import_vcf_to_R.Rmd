@@ -1,0 +1,191 @@
+---
+title: "Read VCF with vcfR"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+editor_options: 
+  chunk_output_type: console
+---
+
+**Started**: Alexey Larionov, 10Jul20  
+**last updated**: Rofaida Desoki, 10Jul20
+
+# Summary
+
+- Import VCF file into vcfR object  
+- Extract header and variants data  
+- Select most informative variants annotations  
+- Extract genotype data: GT, DP and GQ  
+
+<style>
+pre{
+  overflow-x: auto;
+}
+pre code{
+  word-wrap: normal;
+  white-space: pre;
+}
+</style>
+
+```{r echo=F}
+
+options(width=999)
+
+```
+
+# Start section
+
+```{r}
+
+# Time
+Sys.time()
+
+# Clean up
+rm(list=ls())
+graphics.off()
+
+# Options
+options(stringsAsFactors = F)
+
+# Working folders
+base_folder <- "/home/rdesoki/re_gecip/inherited_cancer_predisposition/rofaida/Rproject"
+
+scripts_folder <- file.path(base_folder,"scripts","s08_consolidate_dataset")
+setwd(scripts_folder)
+
+data_folder <- file.path(base_folder,"data","s08_consolidate_dataset")
+dir.create(data_folder)
+
+# Required library
+#install.packages("vcfR")
+library(vcfR)
+
+```
+
+# Read VCF
+
+VCF file is read into an instance of **vcfR** class  
+
+vcfR class includes three slots: "meta", "fix" and "gt":  
+- **meta** means the header of VCF file  
+- **fix** means the "fixed" columns of VCF file, in effect = variants information  
+- **gt** stands for genotypes information  
+
+```{r}
+
+# VCF file name
+vcf_file <- file.path(base_folder,"data","s07_variants_qc_and_filter","s08_genes_ClnVar_LoF_FIM_nonBenign.vcf.gz")
+
+# Read vcf to vcfR object 
+# called "full.vcfr"" to distinguish with the later subsetted sections of vcfr 
+full.vcfr <- read.vcfR(vcf_file)
+
+# Check result
+full.vcfr
+head(full.vcfr)
+
+# Clean-up
+rm(vcf_file)
+
+```
+
+# Extract header and variants information to data frames 
+
+```{r}
+
+# Get list with data from VCF header and fixed/standard VCF columns
+meta_fix <- vcfR2tidy(full.vcfr, info_only=T)
+# Warning allowed at this step:  
+# In lapply(ret[names(ns)], as.numeric) : NAs introduced by coercion
+
+# Get data frame with meta-information from vcf header
+header.df <- meta_fix$meta
+
+# Get data frame with variants information
+variants.df <- as.data.frame(meta_fix$fix)
+dim(variants.df)
+colnames(variants.df) 
+
+# Keep only the required variants annotations
+
+selected_variant_annotations <- c("CHROM","POS","REF","ALT",
+  "vep_SYMBOL","vep_Existing_variation","vep_Consequence","vep_IMPACT",
+  "CLNSIG","CLNSIGCONF","CLNREVSTAT","CLNDN",
+  "vep_gnomAD_NFE_AF","vep_CADD_PHRED","vep_SIFT","vep_PolyPhen",
+  "vep_Protein_position","vep_Amino_acids",
+  "ID","vep_Allele","QUAL","meanDP", "meanGQ","HWE",
+  "vep_EXON","vep_INTRON","CLNHGVS","vep_HGVSc","vep_HGVSp",
+  "vep_cDNA_position","vep_CDS_position","vep_Codons","vep_VARIANT_CLASS",
+  "vep_gnomAD_AF","ALLELEID","vep_PUBMED","AC","AN","AF","MAF")
+
+variants.df <- variants.df[,selected_variant_annotations]
+
+# Write the variants in text file for review
+file_name=file.path(data_folder,"variants_166.txt")
+
+write.table(variants.df,file=file_name,
+            row.names=F,col.names=T,sep="\t",quote=F)
+
+# Clean-up
+rm(meta_fix, selected_variant_annotations, file_name)
+
+```
+
+# Extract genotype data: GT, DP and GQ  
+
+```{r}
+
+# Extract genotypes as numeric codes: 0/1, 1/1 etc 
+full_gt.mx <- extract.gt(full.vcfr, element="GT")
+dim(full_gt.mx)
+full_gt.mx[1:5,1:3]
+sum(is.na(full_gt.mx))
+
+# Extract genotype depth (its a numeric matrix)
+full_dp.mx <- extract.gt(full.vcfr, element="DP", as.numeric = T)
+dim(full_dp.mx)
+full_dp.mx[1:5,1:3]
+sum(is.na(full_dp.mx))
+quantile(full_dp.mx)
+hist(full_dp.mx, lab=T, ylim=c(0,1e6))
+sum(full_dp.mx < 10) # genotypes to be removed
+
+# Extract genotype quality (its a numeric matrix)
+full_gq.mx <- extract.gt(full.vcfr, element="GQ", as.numeric = T)
+dim(full_gq.mx)
+full_gq.mx[1:5,1:3]
+sum(is.na(full_gq.mx))
+quantile(full_gq.mx)
+hist(full_gq.mx)
+sum(full_gq.mx < 20) # genotypes to be removed
+
+```
+
+# Summarize and save
+
+```{r}
+
+ls()
+
+full.vcfr
+
+dim(header.df)
+dim(variants.df)
+
+dim(full_dp.mx)
+dim(full_gq.mx)
+dim(full_gt.mx)
+
+save.image(file.path(data_folder,"s01_import_vcf_to_R.RData"))
+
+```
+
+# Final section
+
+```{r}
+
+sessionInfo()
+Sys.time()
+
+```

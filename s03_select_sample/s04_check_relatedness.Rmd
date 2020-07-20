@@ -1,0 +1,329 @@
+---
+title: "Check relatedness"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+editor_options: 
+  chunk_output_type: console
+---
+
+**Started**: Alexey Larionov, 23Mar20  
+**Last updated**: Rofaida, 28Mar20  
+
+# Summary  
+
+Make sure that no relatives are selected for analysis, because comparing relatives would violate statisitcal assumption about independence of individuals.  
+
+Relatedness is defined by keenship coefficient > 0.04419417 (3rd degree relatives) as calculated by GEL, see  
+- gel_data_resourses/main_programme/aggregated_illumina_vcd/GRCH38/20190228/principal_components_and_relatedness/PCA_readme_20190910.pdf  
+
+The related samples are removed iteratively:  
+
+1) Pairwise related samples are provided by GEL  
+2) Related participants in the selected samples are explored:  
+- 377 pairs of related samples (657 unique samples) identified, of them  
+- 402 are controls, 172 are sporadic cancers and 89 are RD tumour syndromes  
+3) 402 related **controls** are removed  
+4) Remaining related samples are explored again:  
+- 66 pairs of related samples (125 unique samples) identified, of them
+- 72 are sporadic cancers and 55 are RD tumour syndromes  
+5) 66 related participants (38 **sporadic_ca** and 23 **rd_tumours**) are removed  
+6) Remaining samples are explored again, and no related pairs are found  
+
+# Start section
+
+<style>
+pre{
+  overflow-x: auto;
+}
+pre code{
+  word-wrap: normal;
+  white-space: pre;
+}
+</style>
+
+```{r}
+options(width=999)
+```
+
+```{r}
+
+# Time
+Sys.time()
+
+# Clean up
+rm(list=ls())
+graphics.off()
+
+# Dont use factors by default
+options(stringsAsFactors = F)
+
+# Folders
+base_folder <- "/home/rdesoki/re_gecip/inherited_cancer_predisposition/rofaida/Rproject"
+
+# Libraries
+library(dplyr)
+
+```
+
+# load data  
+
+```{r}
+
+# Participants table
+load(paste(base_folder,"data","s03_select_sample","s02_clean_data.RData", sep="/"))
+
+# Folders
+scripts_folder <- paste(base_folder,"scripts","s03_select_sample",sep="/")
+setwd(scripts_folder)
+
+data_folder <- paste(base_folder,"data","s03_select_sample",sep="/")
+
+# Table with related pairs of participants
+related_pairs_all.df <- read.table(paste(scripts_folder,"s03_pairwise_related_samples.txt",sep="/"),
+                               sep="\t",quote="",fill=T)
+
+c("sample1","sample2","kinship") -> colnames(related_pairs_all.df)
+head(related_pairs_all.df)
+
+# Check the data
+ls()
+dim(participants.df)
+dim(related_pairs_all.df)
+
+```
+
+# Check for duplicates in the pairs of related samples  
+
+There are no  
+
+- pairs entered twice in reverse order  
+- duplicated pairs of related samples  
+
+```{r}
+
+# Pairs entered twice in reverse order
+direct_pair <- paste(related_pairs_all.df$sample1, related_pairs_all.df$sample2)
+reverse_pair <- paste(related_pairs_all.df$sample2, related_pairs_all.df$sample1)
+length(intersect(direct_pair,reverse_pair))
+
+# Duplicated pairs
+sum(duplicated(direct_pair))
+sum(duplicated(related_pairs_all.df$sample1))
+sum(duplicated(related_pairs_all.df$sample2))
+
+# Clean-up
+rm(direct_pair, reverse_pair)
+
+```
+
+# Explore related pairs in the selected participants  
+
+```{r}
+
+# Make matrix for output
+related_pairs_selected.mx <- matrix(nrow=0, ncol=3)
+c("sample1","sample2","kinship") -> colnames(related_pairs_selected.mx)
+
+# For each line in related_pairs_all.df
+for(i in 1:nrow(related_pairs_all.df)){
+  
+  # If both related samples are in participants.df
+  if(related_pairs_all.df[i,"sample1"] %in% participants.df$platekey & 
+     related_pairs_all.df[i,"sample2"] %in% participants.df$platekey){
+    
+    # Write the related samples pair into the results matrix
+    related_pairs_selected.mx <- rbind(related_pairs_selected.mx,related_pairs_all.df[i,])
+  }
+}
+
+# Check result
+dim(related_pairs_selected.mx)
+
+# Convert to data frame
+related_pairs_selected.df <- as.data.frame(related_pairs_selected.mx)
+str(related_pairs_selected.df)
+
+# Clean-up
+rm(i, related_pairs_selected.mx)
+
+```
+
+### Explore related participants  
+
+```{r}
+
+# There is no inverse duplicated pairs
+direct_pair <- paste(related_pairs_selected.df$sample1, related_pairs_selected.df$sample2)
+reverse_pair <- paste(related_pairs_selected.df$sample2, related_pairs_selected.df$sample1)
+length(intersect(direct_pair,reverse_pair))
+
+# There are some individual intersects and duplicates
+length(intersect(related_pairs_selected.df$sample1, related_pairs_selected.df$sample2))
+
+sum(duplicated(related_pairs_selected.df$sample1))
+sum(duplicated(related_pairs_selected.df$sample2))
+
+all_related <- unique(c(related_pairs_selected.df$sample1, related_pairs_selected.df$sample2))
+length(all_related)
+
+# Related samples by the group
+participants.df %>% 
+  filter(platekey %in% all_related) %>% 
+  group_by(group) %>% 
+  summarise(counts=n()) %>% 
+  arrange(desc(counts))
+
+# Clean-up
+rm(direct_pair, reverse_pair)
+
+```
+
+# Remove the related **controls**  
+
+```{r}
+
+related_controls.df <- participants.df %>% 
+  filter(platekey %in% all_related & group == "control") %>% 
+  select(participant_id)
+
+participants.df <- participants.df %>% 
+  filter(!participant_id %in% related_controls.df$participant_id)
+
+rm(all_related, related_controls.df, related_pairs_selected.df)
+
+```
+
+# Select related pairs in the **remaining** participants  
+
+```{r}
+
+# Make matrix for output
+related_pairs_selected.mx <- matrix(nrow=0, ncol=3)
+c("sample1","sample2","kinship") -> colnames(related_pairs_selected.mx)
+
+# For each line in related_pairs_all.df
+for(i in 1:nrow(related_pairs_all.df)){
+  
+  # If both related samples are in participants.df
+  if(related_pairs_all.df[i,"sample1"] %in% participants.df$platekey & 
+     related_pairs_all.df[i,"sample2"] %in% participants.df$platekey){
+    
+    # Write the related samples pair into the results matrix
+    related_pairs_selected.mx <- rbind(related_pairs_selected.mx,related_pairs_all.df[i,])
+  }
+}
+
+# Check result
+dim(related_pairs_selected.mx)
+
+# Convert to data frame
+related_pairs_selected.df <- as.data.frame(related_pairs_selected.mx)
+str(related_pairs_selected.df)
+
+# Clean-up
+rm(i, related_pairs_selected.mx)
+
+```
+
+### Explore remaining related pairs  
+
+```{r}
+
+# There are some individual intesects and duplicates
+length(intersect(related_pairs_selected.df$sample1, related_pairs_selected.df$sample2))
+
+sum(duplicated(related_pairs_selected.df$sample1))
+sum(duplicated(related_pairs_selected.df$sample2))
+
+all_related <- unique(c(related_pairs_selected.df$sample1, related_pairs_selected.df$sample2))
+length(all_related)
+
+# Related participants by group
+participants.df %>% 
+  filter(platekey %in% all_related) %>% 
+  group_by(group) %>% 
+  summarise(counts=n()) %>% 
+  arrange(desc(counts))
+
+# Clean-up
+rm(all_related)
+
+```
+
+# Remove related samples in **sporadic_ca** and **rd_tumour_syndromes**
+
+Remove only one sample from the pair  
+
+```{r}
+
+# IDs of the samples to be removed 
+related_ca_and_rd.df <- participants.df %>% 
+  filter(platekey %in% related_pairs_selected.df$sample2) %>% 
+  select(participant_id)
+
+# Groups of the samples to be removed 
+participants.df %>% 
+  filter(participant_id %in% related_ca_and_rd.df$participant_id) %>% 
+  group_by(group) %>% 
+  summarise(n())
+
+# Remove the samples
+participants.df <- participants.df %>% 
+  filter(!participant_id %in% related_ca_and_rd.df$participant_id)
+
+# Clean-up
+rm(related_ca_and_rd.df, related_pairs_selected.df)
+
+```
+
+# Check relatedness in remaining participants
+
+No related pairs in the remaining participants  
+
+```{r}
+
+# Make matrix for output
+related_pairs_selected.mx <- matrix(nrow=0, ncol=3)
+c("sample1","sample2","kinship") -> colnames(related_pairs_selected.mx)
+
+# For each line in related_pairs_all.df
+for(i in 1:nrow(related_pairs_all.df)){
+  
+  # If both related samples are in participants.df
+  if(related_pairs_all.df[i,"sample1"] %in% participants.df$platekey & 
+     related_pairs_all.df[i,"sample2"] %in% participants.df$platekey){
+    
+    # Write the related samples pair into the results matrix
+    related_pairs_selected.mx <- rbind(related_pairs_selected.mx,related_pairs_all.df[i,])
+  }
+}
+
+# Check result
+dim(related_pairs_selected.mx)
+
+# Clean-up
+rm(i, related_pairs_selected.mx, related_pairs_all.df)
+
+```
+
+# Check and save
+
+```{r}
+
+dim(participants.df)
+
+save.image(paste(data_folder,"s04_check_relatedness.RData",sep="/"))
+
+```
+
+# Final section
+
+```{r}
+
+ls()
+sessionInfo()
+Sys.time()
+
+```

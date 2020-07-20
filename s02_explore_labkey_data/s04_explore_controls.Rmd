@@ -1,0 +1,235 @@
+---
+title: "Explore controls"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+editor_options: 
+  chunk_output_type: console
+---
+
+**Last updated**: Rofaida, 17Mar20  
+
+# Summary  
+
+Select and count **controls**  
+Unaffected parents of probands with intellectual disorders  
+
+# Start section
+
+<style>
+pre{
+  overflow-x: auto;
+}
+pre code{
+  word-wrap: normal;
+  white-space: pre;
+}
+</style>
+
+```{r}
+options(width=999)
+```
+
+```{r}
+
+# Time
+Sys.time()
+
+# Clean up
+rm(list=ls())
+graphics.off()
+
+# Dont use factors by default
+options(stringsAsFactors = F)
+
+# Folders
+base_folder <- "/home/rdesoki/re_gecip/inherited_cancer_predisposition/rofaida/Rproject"
+
+# Libraries
+library(dplyr)
+
+```
+
+# load data  
+
+```{r}
+
+load(paste(base_folder,"data","s01_import_Labkey_tables","s02_clean_Labkey_tables.RData", sep="/"))
+
+scripts_folder <- paste(base_folder,"scripts","s02_explore_LabKey_data",sep="/")
+
+data_folder <- paste(base_folder,"data","s02_explore_Labkey_data",sep="/")
+dir.create(data_folder,showWarnings=F)
+
+ls()
+
+dim(vcf_participants.df)
+dim(sporadic_cancers.df)
+dim(rare_diseases.df)
+
+```
+
+# Select participants with Intellectual Disability Disorders (idd)  
+
+Note one duplicated participant_id: its OK, because probands may have several disorders  
+
+```{r}
+
+# Participant_id-s for probands with Intellectual Disability Disorders from Rare Ddiseases
+intellectual_disability.df <- rare_diseases.df %>% 
+  filter(normalised_specific_disease=="Intellectual disability") %>% 
+  select(participant_id)
+
+dim(intellectual_disability.df)
+sum(duplicated(intellectual_disability.df$participant_id))
+
+# Family IDs and parents data for the probands with Intellectual Disability Disorders
+intellectual_disability_family.df <- vcf_participants.df %>% 
+  filter(participant_id %in% intellectual_disability.df$participant_id) %>% 
+  select(participant_id, participant_type, father_affected, mother_affected,rare_diseases_family_sk)
+
+# Explore table with familly IDs and parents data
+dim(intellectual_disability_family.df)
+
+sum(is.na(intellectual_disability_family.df$participant_type))
+table(intellectual_disability_family.df$participant_type)
+
+sum(is.na(intellectual_disability_family.df$father_affected))
+table(intellectual_disability_family.df$father_affected)
+
+sum(is.na(intellectual_disability_family.df$mother_affected))
+table(intellectual_disability_family.df$mother_affected)
+
+# Clean-up
+rm(intellectual_disability.df)
+
+```
+
+# Select uaffected parents of IDD probands  
+
+### Fathers  
+
+```{r}
+
+# Select family IDs of unaffected fathers
+fathers_families.df <- intellectual_disability_family.df %>% 
+  filter(participant_type == "Proband",
+         father_affected == "No") %>% 
+  select(rare_diseases_family_sk)
+
+dim(fathers_families.df)
+sum(duplicated(fathers_families.df$rare_diseases_family_sk))
+
+# Select fathers ID-s from the families
+fathers_id.df <- vcf_participants.df %>% 
+  filter(rare_diseases_family_sk %in% fathers_families.df$rare_diseases_family_sk,
+         biological_relationship_to_proband == "Father") %>% 
+  select(participant_id)
+
+dim(fathers_id.df)
+sum(duplicated(fathers_id.df$participant_id))
+
+# Clean-up
+rm(fathers_families.df)
+
+```
+
+### Mothers  
+
+```{r}
+
+# Select family IDs of unaffected  mothers
+mothers_families.df <- intellectual_disability_family.df %>% 
+  filter(participant_type == "Proband",
+         mother_affected == "No") %>% 
+  select(rare_diseases_family_sk)
+
+dim(mothers_families.df)
+sum(duplicated(mothers_families.df$rare_diseases_family_sk))
+
+# Select  mothers ID-s from the families
+mothers_id.df <- vcf_participants.df %>% 
+  filter(rare_diseases_family_sk %in% mothers_families.df$rare_diseases_family_sk,
+         biological_relationship_to_proband == "Mother") %>% 
+  select(participant_id)
+
+dim( mothers_id.df)
+sum(duplicated(mothers_id.df$participant_id))
+
+# Clean-up
+rm(mothers_families.df, intellectual_disability_family.df)
+
+```
+
+### Merge fathers and mothers ID-s
+
+```{r}
+
+unaffected_parents_idd.df <- vcf_participants.df %>% 
+  filter(participant_id %in% mothers_id.df$participant_id | participant_id %in% fathers_id.df$participant_id) %>% 
+  select(participant_id, biological_relationship_to_proband, age_at_consent)
+
+dim(unaffected_parents_idd.df)
+
+rm(fathers_id.df, mothers_id.df)
+
+```
+
+# Explore selected controls  
+
+Despite selecting the non-affected parents of idd-probands, some of them still have idd and some other rare disease(s).  These controls are removed.  
+
+```{r}
+
+sum(duplicated(unaffected_parents_idd.df$participant_id))
+table(unaffected_parents_idd.df$biological_relationship_to_proband)
+hist(unaffected_parents_idd.df$age, lab=T, ylim=c(0,1200))
+
+controls_id.df <- unaffected_parents_idd.df %>% 
+  select(participant_id)
+
+dim(controls_id.df)
+
+rare_diseases.df %>% 
+  filter(participant_id %in% controls_id.df$participant_id) %>% 
+  group_by(normalised_disease_group) %>% 
+  summarise(counts=n()) %>% 
+  arrange(desc(counts))
+
+rare_diseases.df %>% 
+  filter(participant_id %in% controls_id.df$participant_id) %>% 
+  arrange(normalised_disease_group, normalised_disease_sub_group)
+
+affected_controls.df <- rare_diseases.df %>% 
+  filter(participant_id %in% controls_id.df$participant_id) %>% 
+  select(participant_id)
+
+dim(affected_controls.df)
+
+unaffected_parents_idd.df <- unaffected_parents_idd.df %>% 
+  filter(!participant_id %in% affected_controls.df$participant_id)
+
+dim(unaffected_parents_idd.df)
+
+rm(affected_controls.df, controls_id.df)
+
+```
+
+# Save  result
+
+```{r}
+
+save.image(paste(data_folder,"s04_explore_controls.RData",sep="/"))
+
+```
+
+# Final section
+
+```{r}
+
+ls()
+sessionInfo()
+Sys.time()
+
+```

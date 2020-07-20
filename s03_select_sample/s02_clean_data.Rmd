@@ -1,0 +1,390 @@
+---
+title: "Clean data"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+editor_options: 
+  chunk_output_type: console
+---
+
+**Started**: Alexey Larionov, 23Mar20  
+**Last updated**: Rofaida, 25Mar20
+
+# Summary  
+
+* Explore and clean the data, remove and rearrange columns etc  
+* Evaluate age of **consent**, age of **onset** and age of **diagnosis** in Ca and RD  
+* Set age for participants:  
+    + **Controls** age = age of **consent**  
+    + **Sporadic Ca** age = age of **consent**  
+    + **RD Tumour Syndromes** age = age of **diagnosis**  
+
+# Start section
+
+<style>
+pre{
+  overflow-x: auto;
+}
+pre code{
+  word-wrap: normal;
+  white-space: pre;
+}
+</style>
+
+```{r}
+options(width=999)
+```
+
+```{r}
+
+# Time
+Sys.time()
+
+# Clean up
+rm(list=ls())
+graphics.off()
+
+# Dont use factors by default
+options(stringsAsFactors = F)
+
+# Folders
+base_folder <- "/home/rdesoki/re_gecip/inherited_cancer_predisposition/rofaida/Rproject"
+
+# Libraries
+library(dplyr)
+library(ggplot2)
+
+```
+
+# load data  
+
+```{r}
+
+# Load data
+load(paste(base_folder,"data","s03_select_sample","s01_select_sample.RData", sep="/"))
+
+# Set folders
+scripts_folder <- paste(base_folder,"scripts","s03_select_sample",sep="/")
+setwd(scripts_folder)
+
+data_folder <- paste(base_folder,"data","s03_select_sample",sep="/")
+
+
+# Check data
+ls()
+dim(participants.df)
+
+```
+
+# Remove unnecessary columns
+
+```{r}
+
+# Explore columns
+colnames(participants.df)
+
+# Remove columns
+participants.df <- participants.df %>% 
+  select(- pred_african_ancestries, - pred_american_ancestries, - pred_east_asian_ancestries, 
+         - pred_south_asian_ancestries, - father_affected, - mother_affected)
+
+# Explore result
+colnames(participants.df)
+
+```
+
+# Check ID duplicates  
+
+ID duplicates are expected because some participants may have multiple diseases  
+
+```{r}
+
+sum(duplicated(participants.df$participant_id))
+sum(duplicated(participants.df$platekey))
+
+```
+
+# Remove control's age of consent 
+
+Because its identical to the age of concent available for all participants  
+
+```{r}
+
+# Explore
+sum(is.na(participants.df$age_at_consent))
+sum(is.na(participants.df$control_age_at_consent))
+sum(participants.df$age_at_consent != participants.df$control_age_at_consent, na.rm=T)
+
+# Remove field
+participants.df <- participants.df %>% select(-control_age_at_consent)
+
+```
+
+# Keep relationship to proband for controls only
+
+Even for controls it will not be needed any longer ... keeping just in case  
+
+```{r}
+
+# Explore
+table(participants.df[,c("participant_type","group")])
+
+sum(is.na(participants.df$biological_relationship_to_proband))
+sum(is.na(participants.df$control_relationship_to_proband))
+
+sum(participants.df$biological_relationship_to_proband != 
+      participants.df$control_relationship_to_proband, na.rm=T)
+
+table(participants.df[,c("biological_relationship_to_proband","group")])
+
+participants.df %>% 
+  group_by(biological_relationship_to_proband) %>% 
+  summarise(counts=n()) %>% 
+  arrange(desc(counts))
+
+participants.df %>% 
+  group_by(control_relationship_to_proband) %>% 
+  summarise(counts=n()) %>% 
+  arrange(desc(counts))
+
+# Remove field
+participants.df <- participants.df %>% 
+  select(- biological_relationship_to_proband, - participant_type)
+
+```
+
+# Remove unnecessary "type" column
+
+```{r}
+
+# Eexplore
+table(participants.df[,c("type","group")])
+
+# Remove column
+participants.df <- participants.df %>% 
+  select( - type)
+
+```
+
+# Calculate RD and Ca ages, rename and rearrange columns  
+
+Some columns will never be needed, but kept for now just in case
+
+```{r}
+
+# Remind column names
+colnames(participants.df)
+
+# Calculate diagnosis ages
+participants.df <- participants.df %>% 
+  mutate(sex=participant_phenotypic_sex,
+         rd_diagnosis_age=as.numeric(format(rd_diagnosis_date,"%Y")) - year_of_birth,
+         ca_diagnosis_age=as.numeric(format(ca_diagnosis_date,"%Y")) - year_of_birth) %>% 
+  select(platekey, participant_id, group,
+         sex, year_of_birth, date_of_consent,age_at_consent,
+         rd_age_of_onset,rd_diagnosis_age,ca_diagnosis_age,
+         pc1,pc2,pc3,pc4,pc5,pc6,
+         disease_group, disease_sub_group, disease,
+         sample_type, rare_diseases_family_sk, control_relationship_to_proband,
+         pred_european_ancestries, participant_ethnic_category)
+
+# Check result
+colnames(participants.df)
+
+```
+
+# Compare Ca **diagnosis** age with the age of **consent**
+
+Ca diagnosis age was not yet easily available for many patients. For the patients, where it has been available, the Ca diagnosis age is well reflected by the age of consent.  
+
+Because the age of consent is available for all Ca patients, it will be used for Ca age at diagnosis.  
+
+```{r}
+
+# Relation between age of Ca diagnosis and enrollment
+ggplot(participants.df, aes(x=ca_diagnosis_age,y=age_at_consent)) +
+  geom_point() +
+  ggtitle("Sporadic cancers")
+
+# Count missed data: diagnosis date had not yet been easily provided many cases
+sum(is.na(participants.df[participants.df$group=="sporadic_ca","ca_diagnosis_age"]))
+sum(is.na(participants.df[participants.df$group=="sporadic_ca","age_at_consent"]))
+
+# Count age==0: Ca cases with this suspicious age have already been removed
+sum(participants.df$group=="sporadic_ca" & participants.df$ca_diagnosis_age==0, na.rm = T)
+sum(participants.df$group=="sporadic_ca" & participants.df$age_at_consent==0)
+
+```
+
+# Compare RD **diagnosis** age with the age of **onset** and age of **consent**
+
+We will use age of **diagnosis** for RD age.  However, overall, any of the other "age" fields could be justifiably used for age of participant.  
+
+### Relations between diagnosis, enrollment and onset in all RD patients
+
+Age of **diagnosis** was similar to the age of enrollment (**consent**).  However, the **onset** was often reported much earlier than diagnosis/enrollment. I think that age of **onset** better reports the disease start, so I prefer using it over the other possible ages.  
+
+```{r}
+
+ggplot(participants.df, aes(x=rd_diagnosis_age,y=rd_age_of_onset)) +
+  geom_point() +
+  ggtitle("RD Tumour Syndromes")
+
+ggplot(participants.df, aes(x=age_at_consent,y=rd_age_of_onset)) +
+  geom_point() +
+  ggtitle("RD Tumour Syndromes")
+
+ggplot(participants.df, aes(x=rd_diagnosis_age,y=age_at_consent)) +
+  geom_point() +
+  ggtitle("RD Tumour Syndromes")
+
+```
+
+### Relations between diagnosis, enrollment and onset in familial breast/ovarian Cancer
+
+```{r}
+
+participants.df %>% 
+  filter(disease=="Familial breast and or ovarian cancer") %>% 
+ggplot(aes(x=rd_diagnosis_age,y=rd_age_of_onset)) +
+  geom_point() +
+  ggtitle("Familial breast and or ovarian cancer")
+
+participants.df %>% 
+  filter(disease=="Familial breast and or ovarian cancer") %>% 
+ggplot(aes(x=age_at_consent,y=rd_age_of_onset)) +
+  geom_point() +
+  ggtitle("Familial breast and or ovarian cancer")
+
+participants.df %>% 
+  filter(disease=="Familial breast and or ovarian cancer") %>% 
+ggplot(aes(x=rd_diagnosis_age,y=age_at_consent)) +
+  geom_point() +
+  ggtitle("Familial breast and or ovarian cancer")
+
+```
+
+# Count missed age data
+
+83 RD Tumour Syndromes participants have missed age of **onset** and 89 participants have age of **onset** == 0.  These participants will be removed because many those with onset at 0 years are obvious entry errors (e.g. 11 familial breast cancers at 0 years age).  This will be 83+89=172 of 1,364 RD participants with tumour syndromes.  
+
+```{r}
+
+# Missed data in different age columns in RD  
+sum(is.na(participants.df[participants.df$group=="rd_tumours","rd_diagnosis_age"]))
+sum(is.na(participants.df[participants.df$group=="rd_tumours","rd_age_of_onset"]))
+sum(is.na(participants.df[participants.df$group=="rd_tumours","age_at_consent"]))
+
+# Count age == 0
+sum(participants.df$group=="rd_tumours" & participants.df$rd_diagnosis_age==0)
+sum(participants.df$group=="rd_tumours" & participants.df$rd_age_of_onset==0, na.rm = T)
+sum(participants.df$group=="rd_tumours" & participants.df$age_at_consent==0)
+
+# What RD cases have missed age of onset?
+participants.df %>% 
+  filter(group=="rd_tumours" & is.na(rd_age_of_onset)) %>% 
+  group_by(disease) %>% 
+  summarise(count=n()) %>% 
+  arrange(desc(count))
+
+# What RD cases have age of onset == 0 ?
+participants.df %>% 
+  filter(group=="rd_tumours" & rd_age_of_onset==0) %>% 
+  group_by(disease) %>% 
+  summarise(count=n()) %>% 
+  arrange(desc(count))
+
+# What are the total numbers of RD cases ?
+participants.df %>% 
+  filter(group=="rd_tumours") %>% 
+  group_by(disease) %>% 
+  summarise(count=n()) %>% 
+  arrange(desc(count))
+
+```
+
+# Set age of participants for controls, Ca and RD  
+
+### Make empty column for age
+
+```{r}
+
+# Add new column
+participants.df <- participants.df %>% 
+  mutate(age=NA)
+
+# Reminder for the counts in "group"
+table(participants.df$group)
+
+```
+
+### Age for controls = age of consent
+
+```{r}
+
+# Set controls' age
+participants.df[participants.df$group == "control", "age"] <- 
+  participants.df[participants.df$group == "control", "age_at_consent"]
+
+# Check result
+sum(!is.na(participants.df$age))
+
+```
+
+### Age for sporadic cancers = age of consent
+
+```{r}
+
+# Set Ca age 
+participants.df[participants.df$group == "sporadic_ca", "age"] <- 
+  participants.df[participants.df$group == "sporadic_ca", "age_at_consent"]
+
+# Check result
+sum(!is.na(participants.df$age))
+sum(is.na(participants.df$age))
+
+```
+
+### Age for RD Tumour Syndromes = rd_age_of_diagnosis
+
+```{r}
+
+participants.df[participants.df$group == "rd_tumours", "age"] <- 
+  participants.df[participants.df$group == "rd_tumours", "rd_diagnosis_age"]
+
+sum(!is.na(participants.df$age))
+sum(is.na(participants.df$age))
+
+```
+
+# Remove unnecessary age columns  
+
+```{r}
+
+participants.df <- participants.df %>% 
+  select(platekey, participant_id, group, sex, age, 
+         pc1,pc2,pc3,pc4,pc5,pc6,
+         disease_group, disease_sub_group, disease,
+         sample_type, rare_diseases_family_sk, control_relationship_to_proband,
+         pred_european_ancestries, participant_ethnic_category)
+
+```
+
+# Save  result
+
+```{r}
+
+save.image(paste(data_folder,"s02_clean_data.RData",sep="/"))
+
+```
+
+# Final section
+
+```{r}
+
+ls()
+sessionInfo()
+Sys.time()
+
+```

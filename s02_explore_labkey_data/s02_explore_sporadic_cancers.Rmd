@@ -1,0 +1,257 @@
+---
+title: "Explore Sporadic Cancers"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+editor_options: 
+  chunk_output_type: console
+---
+
+**Last updated**: Rofaida, 15Mar2020  
+
+# Summary  
+
+Explore Sporadic Cancers
+
+# Start section
+
+<style>
+pre{
+  overflow-x: auto;
+}
+pre code{
+  word-wrap: normal;
+  white-space: pre;
+}
+</style>
+
+```{r}
+options(width=999)
+```
+
+```{r}
+
+# Time
+Sys.time()
+
+# Clean up
+rm(list=ls())
+graphics.off()
+
+# Dont use factors by default
+options(stringsAsFactors = F)
+
+# Folders
+base_folder <- "/home/rdesoki/re_gecip/inherited_cancer_predisposition/rofaida/Rproject"
+
+# Libraries
+library(dplyr)
+
+```
+
+# load data  
+
+```{r}
+
+load(paste(base_folder,"data","s01_import_Labkey_tables","s02_clean_Labkey_tables.RData", sep="/"))
+
+scripts_folder <- paste(base_folder,"scripts","s02_explore_Labkey_data",sep="/")
+
+rm(data_folder)
+
+ls()
+
+dim(vcf_participants.df)
+dim(sporadic_cancers.df)
+dim(rare_diseases.df)
+
+```
+
+# Sporadic Cancers table  
+
+```{r}
+
+str(sporadic_cancers.df)
+
+# Disease type (note how to pring all rows in a tible)
+sporadic_cancers.df %>% 
+  group_by(cancer_disease_type) %>% 
+  summarise(counts=n()) %>% 
+  arrange(desc(counts)) %>% 
+  print(n=Inf)
+
+# Disease sub-type
+sporadic_cancers.df %>% 
+  group_by(cancer_disease_sub_type) %>% 
+  summarise(counts=n()) %>% 
+  arrange(desc(counts)) 
+
+# Disease sub-type
+sporadic_cancers.df %>% 
+  group_by(disease) %>% 
+  summarise(counts=n()) %>% 
+  arrange(desc(counts))
+
+# No missed data
+sum(is.na(sporadic_cancers.df$disease))
+
+```
+
+# Specific cancers -- with subtypes
+
+```{r}
+
+# Breast
+sporadic_cancers.df %>% 
+  filter(cancer_disease_type == "BREAST") %>% 
+  group_by(cancer_disease_sub_type) %>% 
+  summarise(counts=n()) %>% 
+  arrange(desc(counts))
+
+# Colorectal
+sporadic_cancers.df %>% 
+  filter(cancer_disease_type == "COLORECTAL") %>% 
+  group_by(cancer_disease_sub_type) %>% 
+  summarise(counts=n()) %>% 
+  arrange(desc(counts))
+
+# Lung
+sporadic_cancers.df %>% 
+  filter(cancer_disease_type == "LUNG") %>% 
+  group_by(cancer_disease_sub_type) %>% 
+  summarise(counts=n()) %>% 
+  arrange(desc(counts))
+
+# Renal
+sporadic_cancers.df %>%
+  filter(cancer_disease_type == "RENAL") %>%
+  group_by(cancer_disease_sub_type) %>%
+  summarise(counts=n()) %>%
+  arrange(desc(counts))
+
+# Sarcomas
+sporadic_cancers.df %>% 
+  filter(cancer_disease_type == "SARCOMA") %>% 
+  group_by(cancer_disease_sub_type) %>% 
+  summarise(counts=n()) %>% 
+  arrange(desc(counts))
+
+# Eendometrial
+sporadic_cancers.df %>% 
+  filter(cancer_disease_type == "ENDOMETRIAL_CARCINOMA") %>% 
+  group_by(cancer_disease_sub_type) %>% 
+  summarise(counts=n()) %>% 
+  arrange(desc(counts))
+
+# Blood
+sporadic_cancers.df %>% 
+  filter(cancer_disease_type == "HAEMONC") %>% 
+  group_by(cancer_disease_sub_type) %>% 
+  summarise(counts=n()) %>% 
+  arrange(desc(counts))
+
+# Ovarian
+sporadic_cancers.df %>% 
+  filter(cancer_disease_type == "OVARIAN") %>% 
+  group_by(cancer_disease_sub_type) %>% 
+  summarise(counts=n()) %>% 
+  arrange(desc(counts))
+
+# Prostate
+sporadic_cancers.df %>% 
+  filter(cancer_disease_type == "PROSTATE") %>% 
+  group_by(cancer_disease_sub_type) %>% 
+  summarise(counts=n()) %>% 
+  arrange(desc(counts))
+
+# Adult glioma
+sporadic_cancers.df %>% 
+  filter(cancer_disease_type == "ADULT_GLIOMA") %>% 
+  group_by(cancer_disease_sub_type) %>% 
+  summarise(counts=n()) %>% 
+  arrange(desc(counts))
+
+# Bladder
+sporadic_cancers.df %>% 
+  filter(cancer_disease_type == "BLADDER") %>% 
+  group_by(cancer_disease_sub_type) %>% 
+  summarise(counts=n()) %>% 
+  arrange(desc(counts))
+
+# Hepato-Pancreato-Bilary
+sporadic_cancers.df %>% 
+  filter(cancer_disease_type == "HEPATOPANCREATOBILIARY") %>% 
+  group_by(cancer_disease_sub_type) %>% 
+  summarise(counts=n()) %>% 
+  arrange(desc(counts))
+
+# Malignant Melanoma
+sporadic_cancers.df %>% 
+  filter(cancer_disease_type == "MALIGNANT_MELANOMA") %>% 
+  group_by(cancer_disease_sub_type) %>% 
+  summarise(counts=n()) %>% 
+  arrange(desc(counts))
+
+# Oral OroPharingeal
+sporadic_cancers.df %>% 
+  filter(cancer_disease_type == "ORAL_OROPHARYNGEAL") %>% 
+  group_by(cancer_disease_sub_type) %>% 
+  summarise(counts=n()) %>% 
+  arrange(desc(counts))
+
+# Upper gastrointestinal
+sporadic_cancers.df %>% 
+  filter(cancer_disease_type == "UPPER_GASTROINTESTINAL") %>% 
+  group_by(cancer_disease_sub_type) %>% 
+  summarise(counts=n()) %>% 
+  arrange(desc(counts))
+
+# Pediatric
+sporadic_cancers.df %>% 
+  filter(cancer_disease_type == "CHILDHOOD") %>% 
+  group_by(cancer_disease_sub_type) %>% 
+  summarise(counts=n()) %>% 
+  arrange(desc(counts))
+
+```
+
+# Participants with multiple cancers    
+
+After consulting with MT it has been decided to keep all records if a participant has two (or more) cancers because such participants are more likely to have cancer predisposition variants.  Such participants should be included into analysis for each of the involved cancers.  Howevewr, a care should be taken that they are not included multiple times when it is not appropriate (upon aggregating genes).  
+
+```{r}
+
+multi_cancer_ids.df <- sporadic_cancers.df %>% 
+  filter(duplicated(sporadic_cancers.df$participant_id)) %>% 
+  select(participant_id)
+
+multi_cancers.df <- sporadic_cancers.df %>% 
+  filter(participant_id %in% multi_cancer_ids.df$participant_id) %>% 
+  select(participant_id, disease)
+
+dim(multi_cancers.df)
+length(unique(multi_cancers.df$participant_id))
+head(multi_cancers.df, n=20)
+
+rm(multi_cancer_ids.df, multi_cancers.df)
+
+```
+
+# Save  result
+
+```{r}
+
+# No changes to save
+
+```
+
+# Final section
+
+```{r}
+
+ls()
+sessionInfo()
+Sys.time()
+
+```

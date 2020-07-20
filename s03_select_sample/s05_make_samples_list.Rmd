@@ -1,0 +1,167 @@
+---
+title: "Make samples list"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+editor_options: 
+  chunk_output_type: console
+---
+
+**Started**: Alexey Larionov, 26Mar20  
+**Last updated**: Rofaida, 05Apr20
+
+# Summary  
+
+The previous steps of analysis:    
+
+- explored available data  
+- selected cases with relevant diagnoses and sufficient numbers of samples for analysis  
+- selected adult controls that are likely to be non-affected by tumours and not diagnosed with other diseases 
+- kept only participants with currently valid consent  
+- removed ethnically non-European participants  
+- defined age of participants  
+- removed potentially blood related cases  
+
+This identified 12,957 participants suitable for downstream statistical analysis  
+
+This script  
+
+- makes a text file that will be used for extracting data from VCF  
+- explores dataset to get final numbers of samples in different sub-groups  
+
+# Start section
+
+<style>
+pre{
+  overflow-x: auto;
+}
+pre code{
+  word-wrap: normal;
+  white-space: pre;
+}
+</style>
+
+```{r}
+options(width=999)
+```
+
+```{r}
+
+# Time
+Sys.time()
+
+# Clean up
+rm(list=ls())
+graphics.off()
+
+# Dont use factors by default
+options(stringsAsFactors = F)
+
+# Folders
+base_folder <- "/home/rdesoki/re_gecip/inherited_cancer_predisposition/rofaida/Rproject"
+
+# Libraries
+library(dplyr)
+library(ggplot2)
+
+```
+
+# Load data  
+
+```{r}
+
+# Participants table
+load(paste(base_folder,"data","s03_select_sample","s04_check_relatedness.RData", sep="/"))
+
+# Folders
+scripts_folder <- paste(base_folder,"scripts","s03_select_sample",sep="/")
+setwd(scripts_folder)
+
+data_folder <- paste(base_folder,"data","s03_select_sample",sep="/")
+dir.create(data_folder,showWarnings=F)
+
+# Check the data
+ls()
+dim(participants.df)
+
+```
+
+# Check counts in sub-groups  
+
+```{r}
+
+colnames(participants.df)
+
+participants.df %>% 
+  group_by(group) %>% 
+  summarise(counts=n()) %>% 
+  arrange(desc(counts))
+
+participants.df %>% 
+  group_by(sex) %>% 
+  summarise(counts=n()) %>% 
+  arrange(desc(counts))
+
+participants.df %>% 
+  ggplot(aes(age, fill=group)) +
+  geom_density(alpha=0.3) +
+  ggtitle("Age in different groups")
+
+participants.df %>% 
+  filter(group=="rd_tumours") %>% 
+  group_by(disease) %>% 
+  summarise(counts=n()) %>% 
+  arrange(desc(counts))
+
+participants.df %>% 
+  filter(group=="sporadic_ca") %>% 
+  group_by(disease_group) %>% 
+  summarise(counts=n()) %>% 
+  arrange(desc(counts))
+
+participants.df %>% 
+  filter(group=="sporadic_ca") %>% 
+  select(participant_id, disease_group, disease) %>%
+  group_by(disease_group, disease) %>% 
+  summarize(counts=n_distinct(participant_id)) %>% 
+  filter(counts > 50) %>% 
+  arrange(desc(counts), .by_group=T) %>% 
+  print(n=Inf)
+
+```
+
+# Export participants  
+
+Note that there are duplicated platekeys/participant_ids in the file because some participants have several tumours.  
+The duplicated platekeys should be removed before the export.  
+
+```{r}
+
+# Check and remove duplicated plate keys
+sum(duplicated(participants.df$platekey))
+platekeys <- unique(participants.df$platekey)
+length(platekeys)
+
+# Write platekeys to the text file
+participants_file <- paste(data_folder, "samples.txt", sep="/")
+
+write.table(platekeys, 
+            file=participants_file,
+            row.names=F, col.names=F,
+            quote=F, sep="\t")
+
+# Clean-up
+rm(participants_file, platekeys)
+
+```
+
+# Final section
+
+```{r}
+
+ls()
+sessionInfo()
+Sys.time()
+
+```

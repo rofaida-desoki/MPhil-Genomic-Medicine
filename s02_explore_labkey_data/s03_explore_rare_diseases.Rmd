@@ -1,0 +1,203 @@
+---
+title: "Explore Rare Diseases"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+editor_options: 
+  chunk_output_type: console
+---
+
+**Last updated**: Rofaida Desoki, 15Mar2020  
+
+# Summary  
+
+Explore Rare Diseases  
+
+# Start section
+
+<style>
+pre{
+  overflow-x: auto;
+}
+pre code{
+  word-wrap: normal;
+  white-space: pre;
+}
+</style>
+
+```{r}
+options(width=999)
+```
+
+```{r}
+
+# Time
+Sys.time()
+
+# Clean up
+rm(list=ls())
+graphics.off()
+
+# Dont use factors by default
+options(stringsAsFactors = F)
+
+# Folders
+base_folder <- "/home/rdesoki/re_gecip/inherited_cancer_predisposition/rofaida/Rproject"
+
+# Libraries
+library(dplyr)
+
+```
+
+# load data  
+
+```{r}
+
+load(paste(base_folder,"data","s01_import_Labkey_tables","s02_clean_Labkey_tables.RData", sep="/"))
+
+scripts_folder <- paste(base_folder,"scripts","s02_explore_Labkey_data",sep="/")
+
+ls()
+
+dim(vcf_participants.df)
+dim(sporadic_cancers.df)
+dim(rare_diseases.df)
+
+```
+
+# Rare Diseases normalised_disease_group  
+
+```{r}
+
+rare_diseases.df %>% 
+  group_by(normalised_disease_group) %>% 
+  summarise(counts=n()) %>% 
+  arrange(desc(counts)) %>% 
+  print(n=Inf)
+
+```
+
+# Rare Diseases Tumour Syndromes
+
+```{r}
+
+rare_diseases.df %>% 
+  filter(normalised_disease_group=="Tumour syndromes") %>% 
+  group_by(normalised_disease_sub_group) %>% 
+  summarise(counts=n()) %>% 
+  arrange(desc(counts)) %>% 
+  print(n=Inf)
+
+rare_diseases.df %>% 
+  filter(normalised_disease_group=="Tumour syndromes") %>% 
+  select(participant_id, normalised_disease_sub_group, normalised_specific_disease) %>% 
+  group_by(normalised_disease_sub_group, normalised_specific_disease) %>% 
+  summarize(counts=n_distinct(participant_id)) %>% 
+  arrange(desc(counts), .by_group=T) %>% 
+  print(n=Inf)
+
+```
+
+# Haematological and immunological disorders
+
+```{r}
+
+rare_diseases.df %>% 
+  filter(normalised_disease_group=="Haematological and immunological disorders") %>% 
+  group_by(normalised_disease_sub_group) %>% 
+  summarise(counts=n()) %>% 
+  arrange(desc(counts)) %>% 
+  print(n=Inf)
+
+rare_diseases.df %>% 
+  filter(normalised_disease_group=="Haematological and immunological disorders") %>% 
+  select(participant_id, normalised_disease_sub_group, normalised_specific_disease) %>% 
+  group_by(normalised_disease_sub_group, normalised_specific_disease) %>% 
+  summarize(counts=n_distinct(participant_id)) %>% 
+  arrange(desc(counts), .by_group=T) %>% 
+  print(n=Inf)
+
+```
+
+# Gastroenterological disorders
+
+```{r}
+
+rare_diseases.df %>% 
+  filter(normalised_disease_group=="Gastroenterological disorders") %>% 
+  group_by(normalised_disease_sub_group) %>% 
+  summarise(counts=n()) %>% 
+  arrange(desc(counts)) %>% 
+  print(n=Inf)
+
+rare_diseases.df %>% 
+  filter(normalised_disease_group=="Gastroenterological disorders") %>% 
+  select(participant_id, normalised_disease_sub_group, normalised_specific_disease) %>% 
+  group_by(normalised_disease_sub_group, normalised_specific_disease) %>% 
+  summarize(counts=n_distinct(participant_id)) %>% 
+  arrange(desc(counts), .by_group=T) %>% 
+  print(n=Inf)
+
+```
+
+# An example of deeper summarising with Dplyr  
+
+Will not be evaluated duing knitting
+
+```{r eval=F}
+
+x <- rare_diseases.df %>% 
+       select(participant_id,normalised_disease_group,normalised_disease_sub_group,normalised_specific_disease) %>% 
+       group_by(normalised_disease_group,normalised_disease_sub_group,normalised_specific_disease) %>% 
+       summarize(counts=n_distinct(participant_id)) %>% 
+       arrange(desc(counts)) %>% 
+       print(n=Inf)
+View(x)
+rm(x)
+
+```
+
+# Participants with two or more RD diagnoses  
+
+After consulting with MT it has been decided to keep all records if a participant has two (or more) rare diseases because such participants are more likely to have predisposition variants.  Such participants should be included into analysis for each of the involved diseases.  Howevewr, a care should be taken that they are not included multiple times when it is not appropriate. 
+
+```{r}
+
+multiple_rd_ids.df <- rare_diseases.df %>% 
+  filter(duplicated(rare_diseases.df$participant_id)) %>% 
+  select(participant_id)
+
+multiple_rds.df <- rare_diseases.df %>% 
+  filter(participant_id %in% multiple_rd_ids.df$participant_id)
+
+dim(multiple_rds.df)
+length(unique(multiple_rds.df$participant_id))
+
+multiple_rds.df %>% 
+  select(participant_id, normalised_disease_group, normalised_specific_disease) %>% 
+  slice(1:6)
+
+
+rm(multiple_rd_ids.df, multiple_rds.df)
+
+```
+
+
+# Save  result
+
+```{r}
+
+# No changes to save
+
+```
+
+# Final section
+
+```{r}
+
+ls()
+sessionInfo()
+Sys.time()
+
+```

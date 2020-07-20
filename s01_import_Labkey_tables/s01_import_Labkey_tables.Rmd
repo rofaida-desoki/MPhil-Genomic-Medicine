@@ -1,0 +1,286 @@
+---
+title: "Import tables from LabKey"
+output: 
+  html_document:
+    toc: true
+editor_options: 
+  chunk_output_type: console
+---
+
+**Started**: Rofaida, 18Feb2020  
+**Last updated**: Rofaida, 13Mar2020
+
+# Summary  
+
+Import selected fields from these four tables:  
+
+- Aggregate VCF stats  
+- Participants  
+- Sporadic Cancer diagnosis  
+- Rare Diseases diagnosis  
+
+Fields and tables were pre-selected manually in exploratory analyis. 
+
+### Field names  
+
+The exact field names are available from the Data Dictionary spreadsheet (link inside GEL-RE):  
+
+- https://re-confluence.gel.zone/pages/viewpage.action?pageId=19630487#MainProgrammeDataReleasev8(28/11/2019)-MainProgrammeReleaseNotev8andDataDictionaryFiles  
+
+### Required configuration  
+
+**.netrc** file was created in the home folder before running the script,  
+as described here (link inside GEL-RE):  
+
+- https://re-confluence.gel.zone/display/GERE/LabKey+Examples  
+
+# Start section
+
+<style>
+pre{
+  overflow-x: auto;
+}
+pre code{
+  word-wrap: normal;
+  white-space: pre;
+}
+</style>
+
+```{r}
+options(width=999)
+```
+
+```{r}
+
+# Time
+Sys.time()
+
+# Clean up
+rm(list=ls())  # remove all objects from environment
+graphics.off() # remove all plots from environment
+
+# Dont use factors by default
+options(stringsAsFactors = F)
+
+# Folders
+base_folder <- "/home/rdesoki/re_gecip/inherited_cancer_predisposition/rofaida/Rproject"
+
+scripts_folder <- paste(base_folder,"scripts","s01_import_Labkey_tables",sep="/")
+setwd(scripts_folder)
+
+data_folder <- paste(base_folder,"data","s01_import_Labkey_tables",sep="/")
+dir.create(data_folder,showWarnings=F)
+
+# Library for connecting to LabKey  
+library(Rlabkey)
+
+# Set labkey baseUrl (do not change)  
+labkey.setDefaults(baseUrl="http://emb-prod-mre-labkey-01.gel.zone:8080/labkey/")
+
+# folder for data release (do not change)
+v8_folder_path="/main-programme/main-programme_v8_2019-11-28" 
+
+```
+
+# aggregate_gvcf_sample_stats table  
+
+Will be used for  
+
+- Link between **plate_key** and **participant_id**  
+- Genetically predicted ethnicity  
+- Maybe for PC-s and parents platekeys  
+
+```{r}
+
+# Set query: define fields and table (refer to Data Dictionary Main Programme v8)
+q <- "SELECT participant_id, 
+             platekey, 
+             type, 
+             sample_type, 
+             PC1,
+             PC2,
+             PC3,
+             PC4,
+             PC5,
+             PC6,
+             pred_african_ancestries,
+             pred_american_ancestries,
+             pred_east_asian_ancestries,
+             pred_european_ancestries,
+             pred_south_asian_ancestries
+      FROM aggregate_gvcf_sample_stats"
+
+# Execute query
+aggregated_vcf.df <- labkey.executeSql(
+    schemaName="lists", # do not change (the internal name of database)
+    colNameOpt="rname", # do not change (makes column names compartible with R)
+    maxRows=100000000, # do not change (should exceed the table size in LabKey GUI)
+    folderPath=v8_folder_path, # data release
+    sql = q # the query name
+)
+
+# Check result
+dim(aggregated_vcf.df)
+str(aggregated_vcf.df)
+head(aggregated_vcf.df)
+
+# Clean-up
+rm(q)
+
+```
+
+# participant table  
+
+Contains demografics and general descriptive data  
+
+```{r}
+
+# Set query: define fields and table (refer to the )
+q <- "SELECT participant_id, 
+             duplicated_participant_id, 
+             participant_type, 
+             biological_relationship_to_proband, 
+             participant_phenotypic_sex, 
+             year_of_birth, 
+             date_of_consent, 
+             participant_ethnic_category, 
+             father_affected, 
+             mother_affected, 
+             rare_diseases_family_sk
+      FROM participant"
+
+# Execute query
+participant.df <- labkey.executeSql(
+    schemaName="lists", # do not change (the internal name of database)
+    colNameOpt="rname", # do not change (makes column names compartible with R)
+    maxRows=100000000, # do not change (should exceed the table size in LabKey GUI)
+    folderPath=v8_folder_path, # data release
+    sql = q # the query name
+)
+
+# Check result
+dim(participant.df)
+str(participant.df)
+head(participant.df)
+
+# Clean-up
+rm(q)
+
+```
+
+# cancer_participant_disease table  
+
+Data about sporadic cancer diagnoses  
+
+```{r}
+
+# Set query: define fields and table (refer to the )
+q <- "SELECT participant_id, 
+             cancer_disease_type, 
+             cancer_disease_sub_type
+      FROM cancer_participant_disease"
+
+# Execute query
+sporadic_cancers.df <- labkey.executeSql(
+    schemaName="lists", # do not change (the internal name of database)
+    colNameOpt="rname", # do not change (makes column names compartible with R)
+    maxRows=100000000, # do not change (should exceed the table size in LabKey GUI)
+    folderPath=v8_folder_path, # data release
+    sql = q # the query name
+)
+
+# Check result
+dim(sporadic_cancers.df)
+str(sporadic_cancers.df)
+head(sporadic_cancers.df)
+
+# Clean-up
+rm(q)
+
+```
+
+# cancer_participant_tumour table  
+
+It is imported because it has date of diagnosis for sporadic cancer.  
+However, later exploration showed that this column has too much missed values.    
+So the date of concent may be used instead.  
+
+```{r}
+
+# Set query: define fields and table (refer to the )
+q <- "SELECT participant_id, 
+             diagnosis_date, 
+      FROM cancer_participant_tumour"
+
+# Execute query
+cancer_diagnosis_date.df <- labkey.executeSql(
+    schemaName="lists", # do not change (the internal name of database)
+    colNameOpt="rname", # do not change (makes column names compartible with R)
+    maxRows=100000000, # do not change (should exceed the table size in LabKey GUI)
+    folderPath=v8_folder_path, # data release
+    sql = q # the query name
+)
+
+# Check result
+dim(cancer_diagnosis_date.df)
+str(cancer_diagnosis_date.df)
+head(cancer_diagnosis_date.df)
+
+# Clean-up
+rm(q)
+
+```
+
+# rare_diseases_participant_disease table  
+
+Data about RD diagnoses  
+
+```{r}
+
+# Set query: define fields and table (refer to the )
+q <- "SELECT participant_id, 
+             normalised_disease_group,
+             normalised_disease_sub_group,
+             normalised_specific_disease,
+             normalised_age_of_onset,
+             diagnosis_date,
+      FROM rare_diseases_participant_disease"
+
+# Execute query
+rare_diseases.df <- labkey.executeSql(
+    schemaName="lists", # do not change (the internal name of database)
+    colNameOpt="rname", # do not change (makes column names compartible with R)
+    maxRows=100000000, # do not change (should exceed the table size in LabKey GUI)
+    folderPath=v8_folder_path, # data release
+    sql = q # the query name
+)
+
+# Check result
+dim(rare_diseases.df)
+str(rare_diseases.df)
+head(rare_diseases.df)
+
+# Clean-up
+rm(q)
+
+```
+
+# Save  result
+
+```{r}
+
+rm(v8_folder_path)
+
+save.image(file=paste(data_folder,"s01_import_Labkey_tables.RData",sep="/"))
+
+```
+
+# Final section
+
+```{r}
+
+ls()           # list objects in the environment
+sessionInfo()  # list loaded libraries etc
+Sys.time()     # print time
+
+```

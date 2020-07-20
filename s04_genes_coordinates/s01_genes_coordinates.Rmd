@@ -1,0 +1,231 @@
+---
+title: "Genes coordinates in GRCh38 from EnsDb v.86"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+editor_options: 
+  chunk_output_type: console
+---
+
+**Started**: Alexey Larionov, 25Mar20
+**Last updated**: Rofaida, 03Apr20  
+
+# Summary
+
+Select genes coordinates from Ensembl database (using EnsDb.Hsapiens.v86) and save it in BED file format  
+
+MMR genes: MLH1, MSH2, MSH6, PMS2, MSH3, PMS1 and EPCAM  
+HDGC predisposing genes: CDH1, MAP3K6, MYD88 and CTNNA1  
+
+# Prerequiests  
+
+### Access to Bioconductor  
+
+Make sure that access to Bioconductor was configured as described here:  
+
+- https://re-confluence.gel.zone/display/GERE/R%2C+RStudio+and+R+modules+in+the+Research+Environment#R,RStudioandRmodulesintheResearchEnvironment-InstallingBioconductorpackages  
+
+I.e. make/open **~/.Renviron** file and add the following lines to it:  
+
+- http_proxy=10.0.75.6:3128  
+- https_proxy=10.0.75.6:3128  
+
+### R version above 3.6  
+
+Make sure that R version above 3.6 is used, as described here:  
+
+- https://re-confluence.gel.zone/display/GERE/R%2C+RStudio+and+R+modules+in+the+Research+Environment#R,RStudioandRmodulesintheResearchEnvironment-SelectingaversionofRtouse  
+
+I.e. start R-studion from terminal using these two commands:  
+
+- module load R/3.6.1  
+- /usr/bin/rstudio  
+
+### Notes
+
+- libraries may need to be re-installed for each new R version (e.g. you may need reinstall dplyr, SKAT etc)  
+- links were accessed from inside GEL on 03Apr2020  
+
+# Start section
+
+<style>
+pre{
+  overflow-x: auto;
+}
+pre code{
+  word-wrap: normal;
+  white-space: pre;
+}
+</style>
+
+```{r}
+
+options(width=999)
+
+```
+
+# Check R version
+
+```{r}
+
+version
+
+```
+
+# Install EnsDb.Hsapiens.v86  
+
+Installing **EnsDb.Hsapiens.v86** and all its dependencies may take 5-10 min.  However, it should be done only once.  I have already done it, hence eval=F in the chunk options.  
+
+```{r eval=F}
+
+#install.packages("BiocManager")
+#BiocManager::install("EnsDb.Hsapiens.v86")
+
+```
+
+# Start section
+
+```{r}
+
+# Time
+Sys.time()
+
+# Clean up
+rm(list=ls())
+graphics.off()
+
+# Dont use factors by default
+options(stringsAsFactors = F)
+
+# Folders
+base_folder <- "/home/rdesoki/re_gecip/inherited_cancer_predisposition/rofaida/Rproject"
+
+scripts_folder <- paste(base_folder,"scripts","s04_genes_coordinates",sep="/")
+setwd(scripts_folder)
+
+data_folder <- paste(base_folder,"data","s04_genes_coordinates",sep="/")
+dir.create(data_folder,showWarnings=F)
+
+```
+
+# Get gene(s) coordinates  
+
+Much more information could be extracted from Ensemble Ddatabase.  
+However, we will only use it to get genes start and end.  
+
+Note that EnsDb.Hsapiens.v86 reports many information and dependencies when loaded.  
+
+Importantly, one of EnsDb dependencies **interferes with dplyr**:  
+this is why dplyr is loded after the work with EnsDb is done.  
+
+
+```{r}
+
+# Load the Ensembl Database v.86  
+library(EnsDb.Hsapiens.v86)
+
+# Set list of genes  
+genes <- c("MLH1", "MSH2", "MSH6", "PMS2", "MSH3", "PMS1", "EPCAM", "CDH1", "MAP3K6", "MYD88", "CTNNA1")
+
+# Get genes information in Genomic Ranges format
+genes(EnsDb.Hsapiens.v86, 
+      filter = ~ gene_name %in% genes)
+
+# Select only protein_coding records
+genes.gr <- genes(EnsDb.Hsapiens.v86, 
+      filter = ~ gene_name %in% genes & gene_biotype == "protein_coding")
+
+# Check result: note that GRCh38 was used
+genes.gr
+
+# Clean-up
+rm(genes)
+
+```
+
+# Extract the information into a data frame  
+
+EnsDb.Hsapiens.v86 uses specialised data formats, such as **RLE** instead of *vectors* and **Genomic Ranges** instead of *data.frames*. These data formats provide many useful features for advanced genomic analysis in R. However, we are not going to do such advanced analyses, so we will convert **Genomic Ranges** to conventional R data types.  
+
+**Notes:**  
+
+- dplyr issues many warnings when loaded after EnsDb.Hsapiens.v86  
+- None of the genes is located on X or Y chromosomes, this allows 
+    + treating chromosomes as numeric  
+    + avoiding some other potential issues downstream during the variants assessment and filtering  
+
+```{r}
+
+# Libraries
+library(dplyr)
+
+# Convert gene ranges to data frame
+genes.df <- as.data.frame(genes.gr)
+
+# Check result: no X or Y chromosomes
+genes.df
+
+# Check result
+str(genes.df)
+
+# Change factors to vectors, ignore list in entrezids (it will not be used)
+genes.df$seqnames <- as.integer(as.vector(genes.df$seqnames))
+
+genes.df$strand <- as.integer(as.vector(genes.df$strand))
+str(genes.df)
+
+# Select required fields and sort records
+genes.df <- genes.df %>% 
+  select(gene_name, chr=seqnames, start, end, strand) %>% 
+  arrange(chr,start)
+
+# Check result
+genes.df
+
+```
+
+# Record data in bed-6 file format
+
+**bed** file formats are defined by UCSC.  
+It has to be plain tab-delimited text without header with a specific set of columns in a specific order.  
+
+Importantly, UCSC coordinate system (used for storing coordinates in UCSC Genome Browser tables) is different from Ensembl:  
+UCSC is zero-based, end-open (half open).  Ensembl is 1-based, closed at both ends (fullly closed).  
+Hense 1 should be subtracted from Ensembl start position when converting to UCSC.  
+
+```{r}
+
+# Prepare dataframe with data for bed file
+genes_bed6.df <- genes.df %>% 
+  mutate(score=".") %>% 
+  transmute(chr,
+            start=start-1,
+            end,
+            name=gene_name,
+            score,
+            strand)
+
+# Write the bed file
+file_name <- paste(data_folder, "genes.bed", sep="/")
+write.table(genes_bed6.df,
+            file=file_name,
+            row.names = F,
+            col.names = F,
+            quote=F,
+            sep="\t")
+
+# Clean-up
+rm(file_name)
+
+```
+
+# Final section
+
+```{r}
+
+ls()
+sessionInfo()
+Sys.time()
+
+```

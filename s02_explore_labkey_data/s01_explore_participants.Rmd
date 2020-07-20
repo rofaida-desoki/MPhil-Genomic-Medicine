@@ -1,0 +1,157 @@
+---
+title: "Explore Participants table"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+editor_options: 
+  chunk_output_type: console
+---
+
+**last updated**: Rofaida, 15Mar2020  
+
+# Summary  
+
+Explore Common Participants table  
+
+# Start section
+
+<style>
+pre{
+  overflow-x: auto;
+}
+pre code{
+  word-wrap: normal;
+  white-space: pre;
+}
+</style>
+
+```{r}
+options(width=999)
+```
+
+```{r}
+
+# Time
+Sys.time()
+
+# Clean up
+rm(list=ls())
+graphics.off()
+
+# Dont use factors by default
+options(stringsAsFactors = F)
+
+# Folders
+base_folder <- "/home/rdesoki/re_gecip/inherited_cancer_predisposition/rofaida/Rproject/"
+
+# Libraries
+library(dplyr)
+
+```
+
+# load data  
+
+```{r}
+
+load(paste(base_folder,"data","s01_import_Labkey_tables","s02_clean_Labkey_tables.RData", sep="/"))
+
+scripts_folder <- paste(base_folder,"scripts","s02_explore_Labkey_data",sep="/")
+
+ls()
+
+dim(vcf_participants.df)
+dim(sporadic_cancers.df)
+dim(rare_diseases.df)
+
+```
+
+# participants table  
+
+```{r}
+
+str(vcf_participants.df)
+
+# No duplicated patient_id-s
+sum(duplicated(vcf_participants.df$participant_id))
+
+# No duplicated plate_key-s
+sum(duplicated(vcf_participants.df$plate_key))
+
+# Reasonable data in the type field
+table(vcf_participants.df$type)
+
+# Unexpected sources of samples: keep blod only?
+table(vcf_participants.df$sample_type)
+
+# RD family SK
+sum(is.na(vcf_participants.df$rare_diseases_family_sk))
+
+# Participant type
+sum(is.na(vcf_participants.df$participant_type))
+table(vcf_participants.df$participant_type)
+
+# Relationship to proband
+vcf_participants.df %>% 
+  group_by(biological_relationship_to_proband) %>% 
+  summarise(counts=n()) %>% 
+  arrange(desc(counts))
+
+# Participant phenotypic gender
+table(vcf_participants.df$participant_phenotypic_sex)
+
+# Participant phenotypic year of birth
+sum(is.na(vcf_participants.df$year_of_birth))
+hist(vcf_participants.df$year_of_birth)
+
+# Date of consent 
+sum(is.na(vcf_participants.df$date_of_consent))
+
+# Participant ethnic category
+# Relationship to proband
+vcf_participants.df %>% 
+  group_by(participant_ethnic_category) %>% 
+  summarise(counts=n()) %>% 
+  arrange(desc(counts))
+
+# Affected father
+sum(is.na(vcf_participants.df$father_affected))
+sort(table(vcf_participants.df$father_affected), decreasing = T)
+
+# Affected mother
+sum(is.na(vcf_participants.df$mother_affected))
+sort(table(vcf_participants.df$mother_affected), decreasing = T)
+
+# Check for duplicated parents plate keys
+sum(duplicated(vcf_participants.df$paternal_platekey[vcf_participants.df$paternal_platekey != 0]))
+sum(duplicated(vcf_participants.df$maternal_platekey[vcf_participants.df$maternal_platekey != 0]))
+
+# Presence in the list of unrelated individuals
+ls(vcf_participants.df)
+
+# Predicted ethnicities
+hist(vcf_participants.df$pred_african_ancestries)
+hist(vcf_participants.df$pred_american_ancestries)
+hist(vcf_participants.df$pred_east_asian_ancestries)
+hist(vcf_participants.df$pred_european_ancestries)
+hist(vcf_participants.df$pred_south_asian_ancestries)
+
+```
+
+# Save  result
+
+```{r}
+
+# No changes to save
+
+```
+
+# Final section
+
+```{r}
+
+ls()
+sessionInfo()
+Sys.time()
+
+```

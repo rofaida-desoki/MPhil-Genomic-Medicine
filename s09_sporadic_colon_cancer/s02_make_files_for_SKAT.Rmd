@@ -1,0 +1,225 @@
+---
+title: "Select files for SKAT"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+editor_options: 
+  chunk_output_type: console
+---
+
+**Started**: Alexey Larionov, 13Jul20 
+**Last updated**: Rofaida Desoki, 17Jul20
+
+# Summary
+
+Make files required by SKAT library:  
+
+- VCF and FAM: to be converted to PLINK fileset
+- Covariates and Set-ID files
+
+<style>
+pre{
+  overflow-x: auto;
+}
+pre code{
+  word-wrap: normal;
+  white-space: pre;
+}
+</style>
+
+```{r echo=F}
+
+options(width=999)
+
+```
+
+# Start section
+
+```{r}
+
+# Time
+Sys.time()
+
+# Clean up
+rm(list=ls())
+graphics.off()
+
+# Additional options
+options(stringsAsFactors = F)
+
+# Working folders
+base_folder <- "/home/rdesoki/re_gecip/inherited_cancer_predisposition/rofaida/Rproject"
+
+scripts_folder <- file.path(base_folder,"scripts","s09_sporadic_colon_cancer")
+setwd(scripts_folder)
+
+data_folder <- file.path(base_folder,"data","s09_sporadic_colon_cancer")
+
+vcf_fam_folder <- file.path(data_folder,"vcf_fam")
+dir.create(vcf_fam_folder)
+
+covars_sets_folder <- file.path(data_folder,"covars_sets")
+dir.create(covars_sets_folder)
+
+# Required library (to write VCF)
+library(vcfR) 
+
+```
+
+# Load selected data
+
+```{r}
+
+load(file.path(data_folder,"s01_select_data.RData"))
+
+```
+
+# Write VCF
+
+```{r}
+
+# Write the updated VCF
+vcf_file <- file.path(vcf_fam_folder, "selected.vcf.gz")
+write.vcf(selected.vcfr, vcf_file)
+
+# Clean-up
+rm(vcf_file)
+
+```
+
+# Write FAM file
+
+This is a text file with no header line, and one line per sample with the following six fields:
+
+- Family ID ('FID')
+- Within-family ID ('IID'; cannot be '0')
+- Within-family ID of father ('0' if father isn't in dataset)
+- Within-family ID of mother ('0' if mother isn't in dataset)
+- Sex code ('1' = male, '2' = female, '0' = unknown)
+- Phenotype value ('1' = control, '2' = case, '-9'/'0'/non-numeric = missing data if case/control)  
+
+```{r}
+
+# Code case IDs
+FID <- phenotypes.df$platekey # Family ID
+IID <- phenotypes.df$platekey # Individual ID: set equal to family ID
+
+# Code parent's IDs (missed = 0)
+father_ID <- rep(0, nrow(phenotypes.df))
+mother_ID <- rep(0, nrow(phenotypes.df))
+
+# Code sex
+table(phenotypes.df$sex)
+sex <- as.vector(phenotypes.df$sex)
+sex <- sub("Male","1",sex)
+sex <- sub("Female","2",sex)
+sex <- as.integer(sex)
+table(sex)
+
+# Code phenotypes
+table(phenotypes.df$group)
+phenotype <- as.vector(phenotypes.df$group)
+phenotype <- sub("control","1",phenotype)
+phenotype <- sub("sporadic_ca","2",phenotype)
+phenotype <- as.integer(phenotype)
+table(phenotype)
+
+# Check sync (just in case)
+sum(FID != colnames(genotypes.mx)) 
+
+# Compile data frame for fam file
+fam.df <- data.frame(FID, IID, father_ID, mother_ID, sex, phenotype)
+
+# Check result
+dim(fam.df)
+head(fam.df)
+sum(is.na(fam.df))
+
+# Write plink fam file
+fam_file <- file.path(vcf_fam_folder,"selected.fam")
+write.table(fam.df, file = fam_file, quote = FALSE, row.names = FALSE, col.names = FALSE)
+
+# Clean-up
+rm(FID, IID, father_ID, mother_ID, sex, phenotype, vcf_fam_folder, fam_file)
+
+```
+
+# Write Covars file
+
+```{r}
+
+# Check available annotations
+colnames(phenotypes.df)
+
+# Select required columns
+covars.df <- phenotypes.df[,c("platekey","platekey","sex","age","pc1","pc2","pc3","pc4","pc5","pc6")]
+
+colnames(covars.df) <- c("FID","IID","sex","age","pc1","pc2","pc3","pc4","pc5","pc6")
+
+# Code sex
+table(covars.df$sex)
+sex <- as.vector(covars.df$sex)
+sex <- sub("Male","1",sex)
+sex <- sub("Female","2",sex)
+sex <- as.integer(sex)
+table(sex)
+
+# Update covars table
+head(covars.df)
+covars.df$sex <- sex
+head(covars.df)
+
+# Write the file
+cov_file <- file.path(covars_sets_folder,"dataset.cov")
+write.table(covars.df, file = cov_file, 
+            quote = FALSE, row.names = FALSE, col.names = TRUE)
+
+# Clean-up
+rm(sex, cov_file)
+
+```
+
+# Write SetID
+
+```{r}
+
+# Check variants annotations
+colnames(variants.df)
+
+# Select required columns
+# (the first column for Sets, the second - for Variants)
+SetID.df <- variants.df[,c("vep_SYMBOL","ID")]
+
+# Check result
+dim(SetID.df)
+SetID.df[1:5,]
+sum(is.na(SetID.df))
+
+# Write setID file
+SetID_file <- file.path(covars_sets_folder,"dataset.SetID")
+write.table(SetID.df, file = SetID_file, 
+            quote = FALSE, row.names = FALSE, col.names = FALSE)
+
+# Clean-up
+rm(SetID_file,covars_sets_folder)
+
+```
+
+# Save data
+
+```{r}
+
+save.image(file.path(data_folder,"s02_make_files_for_SKAT.RData"))
+
+```
+
+# Final section
+
+```{r}
+
+ls()
+sessionInfo()
+Sys.time()
+
+```

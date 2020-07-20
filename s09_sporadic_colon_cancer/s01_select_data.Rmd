@@ -1,0 +1,376 @@
+---
+title: "Select data for sporadic colon cancer"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+editor_options: 
+  chunk_output_type: console
+---
+
+**Started**: Alexey Larionov, 13Jul20 
+**Last updated**: Rofaida Desoki, 17Jul20
+
+# Summary
+
+Select data for sporadic colon cancer:  
+
+- select cases
+- select controls
+- merge cases and controls
+- check call rate per variant
+- remove variants that are homozygous reference in all selected cases and controls
+
+When selecting controls exclude age younger than the youngest cases.  
+
+For sex-specific cancers (e.g. prostate or ovaries) use controls of the apropriate sex only.
+
+<style>
+pre{
+  overflow-x: auto;
+}
+pre code{
+  word-wrap: normal;
+  white-space: pre;
+}
+</style>
+
+```{r echo=F}
+
+options(width=999)
+
+```
+
+# Start section
+
+```{r}
+
+# Time
+Sys.time()
+
+# Clean up
+rm(list=ls())
+graphics.off()
+
+# Additional options
+options(stringsAsFactors = F)
+
+# Base folder
+base_folder <- "/home/rdesoki/re_gecip/inherited_cancer_predisposition/rofaida/Rproject"
+
+# Required library 
+library(vcfR) # to work with vcfR object
+library(dplyr)
+library(ggplot2)
+
+```
+
+# Load full data
+
+```{r}
+
+load(file.path(base_folder,"data","s08_consolidate_dataset","s03_add_phenotypes.RData"))
+
+# Remove unnecessary tables
+rm(full_dp.mx, full_gq.mx, header.df)
+
+# Working folders
+scripts_folder <- file.path(base_folder,"scripts","s09_sporadic_colon_cancer")
+setwd(scripts_folder)
+
+data_folder <- file.path(base_folder,"data","s09_sporadic_colon_cancer")
+dir.create(data_folder)
+
+```
+
+# Explore participants
+
+```{r}
+
+colnames(participants.df)
+
+participants.df %>% 
+  group_by(group) %>% 
+  summarise(counts=n()) %>% 
+  arrange(desc(counts))
+
+participants.df %>% 
+  group_by(sex) %>% 
+  summarise(counts=n()) %>% 
+  arrange(desc(counts))
+
+ggplot(participants.df,aes(x=age,fill=group)) + 
+  geom_density(alpha=0.3) +
+  ggtitle("Age")
+
+participants.df %>% 
+  group_by(disease_group) %>% 
+  summarise(counts=n()) %>% 
+  arrange(desc(counts)) %>% 
+  print(n=Inf)
+
+participants.df %>% 
+  group_by(disease_sub_group) %>% 
+  summarise(counts=n()) %>% 
+  arrange(desc(counts))
+
+participants.df %>% 
+  group_by(disease) %>% 
+  summarise(counts=n()) %>% 
+  arrange(desc(counts))
+
+participants.df %>% 
+  filter(disease_group == "COLORECTAL") %>% 
+  group_by(disease) %>% 
+  summarise(counts=n()) %>% 
+  arrange(desc(counts))
+
+participants.df %>% 
+  group_by(sample_type) %>% 
+  summarise(counts=n()) %>% 
+  arrange(desc(counts))
+
+```
+
+# Select cases 
+
+```{r}
+
+cases.df <- participants.df %>% 
+  filter(disease == "COLORECTAL-Adenocarcinoma")
+
+dim(cases.df)
+
+# Get minimal age in cases
+min_cases_age <- min(cases.df$age)
+min_cases_age
+
+```
+
+# Select controls
+
+match minimal age and sex to cases  
+
+```{r}
+
+controls.df <- participants.df %>% 
+  filter(group == "control" & age >= min_cases_age)
+
+dim(controls.df)
+
+```
+
+# Combine cases and controls
+
+Keep only case/control status and necessary covariates.  
+Check and remove the duplicates, if any.  
+
+```{r}
+
+# Make combined table
+phenotypes.df <- rbind(cases.df,controls.df)
+
+# Keep only necessary annotations
+phenotypes.df <-  phenotypes.df %>% 
+  select(platekey,group,sex,age,pc1,pc2,pc3,pc4,pc5,pc6)
+
+# Check duplicates (remove if  any)
+duplicaed_platekeys <- duplicated(phenotypes.df$platekey)
+sum(duplicaed_platekeys)
+# phenotypes.df <-  phenotypes.df[!duplicaed_platekeys,]
+
+# Explore result
+dim(phenotypes.df)
+
+phenotypes.df[1:5,]
+
+phenotypes.df %>% 
+  group_by(group) %>% 
+  summarise(counts=n()) %>% 
+  arrange(desc(counts))
+
+phenotypes.df %>% 
+  group_by(sex) %>% 
+  summarise(counts=n()) %>% 
+  arrange(desc(counts))
+
+ggplot(phenotypes.df,aes(x=age,fill=group)) + 
+  geom_density(alpha=0.3) +
+  ggtitle("Age")
+
+# Clean-up
+rm(cases.df,controls.df,min_cases_age,participants.df,duplicaed_platekeys)
+
+```
+
+# Select genotypes
+
+```{r}
+
+# Keep only required genotypes
+dim(full_gt.mx)
+genotypes.mx <- full_gt.mx[,phenotypes.df$platekey]
+
+# Check result
+dim(genotypes.mx)
+
+# Clean-up
+rm(full_gt.mx)
+
+```
+
+# Exclude variants removed in manual review  
+
+8 variants were manually excluded from the automaticlly selected list on the ground that:  
+
+- CADD phred score below 20 in new variants or
+- Conflicting interpretation of pathogenicity by ClinVar where there were more submitters suggesting Benign than VUS interpretation  
+
+```{r}
+
+# List of variants considered benign on manual review
+#excluded_variants_file <- file.path(scripts_folder,"d01_variants_excluded_on_manual_review.txt")
+#excluded_variants <- scan(excluded_variants_file, what="character")
+
+excluded_variants <- c("chr1_27366400_C_CT","chr2_47476481_G_A","chr2_47737389_A_G",  "chr2_47806652_GTAACTAACTAACTATAATGGAATTA_G","chr2_189854648_T_TA",  "chr7_5992008_T_C","chr7_5999193_C_T","chr7_6005969_C_G")
+
+# Remove from variants.df
+variants.df <- variants.df[ ! variants.df$ID %in% excluded_variants, ]
+dim(variants.df)
+
+# Remove from genotypes.mx
+genotypes.mx <- genotypes.mx[variants.df$ID,]
+dim(genotypes.mx)
+
+# Clean-up
+rm(excluded_variants_file, excluded_variants)
+
+```
+
+# Check for variants missed in the selected cases and controls
+
+After selecting cases and controls some variants, previously present in the full dataset, are no longer here (i.e. no ALT alleles observed in the selected slice of data).  
+
+```{r}
+
+# Check genotypes before removal of missed variants
+dim(genotypes.mx)
+genotypes.mx[1:5,1:5]
+
+# Get index of the missed variants
+missed_variants <- apply(genotypes.mx,1,function(x){all(x=="0/0",na.rm=T)})
+sum(missed_variants)
+
+# Remove missed variants from the genotypes matrix
+genotypes.mx <- genotypes.mx[!missed_variants,]
+dim(genotypes.mx)
+
+# Remove variants from the variants data frame
+rownames(variants.df) <- variants.df$ID
+variants.df <- variants.df[rownames(genotypes.mx),]
+dim(variants.df)
+
+# Check retained genes
+variants.df %>% 
+  group_by(vep_SYMBOL) %>% 
+  summarise(count=n()) %>% 
+  arrange(desc(count))
+
+# Clean-up
+rm(missed_variants)
+
+```
+
+# Check call rate per variants
+
+Remove variants with call rate < 0.85 (if any) from both: genotypes and variants   
+
+```{r}
+
+var_call_rates <- apply(genotypes.mx, 1, function(x){sum(!is.na(x))/length(x)})
+hist(var_call_rates, labels = T, ylim=c(0,150))
+min(var_call_rates)
+
+# Clean-up
+rm(var_call_rates)
+
+```
+
+# Update vcfR
+
+Two vcfR slots should be updated: "gt" and "fix"
+
+### Prepare data for "gt" slot
+
+Just adding "FORMAT" column to already selected genotypes matrix
+
+```{r}
+
+FORMAT <- rep("GT",nrow(genotypes.mx))
+selected_vcfr_gt.mx <- cbind(FORMAT,genotypes.mx)
+selected_vcfr_gt.mx[1:5,1:5]
+
+```
+
+### Prepare data for "fix"" slot
+
+Keep only variants retained in the updated "gt" slot
+
+```{r}
+
+# Extract full fix slot using "@" operator
+full_fix.mx <- full.vcfr@fix
+
+# Add rownames
+rownames(full_fix.mx) <- full_fix.mx[,"ID"] 
+
+# Check results
+full_fix.mx[1:5,1:5] 
+
+# Selected data for "fix" slot
+selected_vcfr_fix.mx <- full_fix.mx[rownames(selected_vcfr_gt.mx),] 
+
+# Clean-up
+rm(full_fix.mx)
+
+```
+
+### Place the selected data to a vcfR object
+
+```{r}
+
+# Make a copy of the initial full vcfR object
+selected.vcfr <- full.vcfr
+
+# Update "gt" slot in vcfR
+selected_vcfr_gt.mx -> selected.vcfr@gt
+
+# Update "fix" slot in vcfR
+selected_vcfr_fix.mx -> selected.vcfr@fix
+
+# Check result
+selected.vcfr
+head(selected.vcfr)
+
+# Clean-up
+rm(FORMAT, full.vcfr, selected_vcfr_gt.mx, selected_vcfr_fix.mx)
+
+```
+
+# Save data
+
+```{r}
+
+save.image(file.path(data_folder,"s01_select_data.RData"))
+
+```
+
+# Final section
+
+```{r}
+
+ls()
+sessionInfo()
+Sys.time()
+
+```
