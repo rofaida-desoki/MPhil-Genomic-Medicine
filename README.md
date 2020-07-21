@@ -4,7 +4,7 @@
 ## University of Cambridge
 
 ### Research Project:
-"Exploring Cancer Predisposition in the 100,000 Genomes Project dataset
+Exploring Cancer Predisposition in the 100,000 Genomes Project dataset
 
 ### Study Aims:
 
