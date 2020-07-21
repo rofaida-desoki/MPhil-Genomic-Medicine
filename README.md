@@ -4,7 +4,7 @@
 ## University of Cambridge
 
 ### Research Project:
-** Exploring Cancer Predisposition in the 100,000 Genomes Project dataset **
+"Exploring Cancer Predisposition in the 100,000 Genomes Project dataset
 
 ### Study Aims:
 
@@ -39,6 +39,6 @@ The selected cancer-associated pathways were as follows:
 8. SKAT preparation: prepare files required for SKAT library 
 9. Association analysis: Test for associations using SKAT library
 
-The repository was set-up to support the research project through provided the details of the project pipeline.
+The repository was set-up to support the MPhil research project through providing the details of the project pipeline.
 The repository can be used by the public and it is adapted to the Genomics England research environment.
 
