@@ -357,6 +357,23 @@ rm(FORMAT, full.vcfr, selected_vcfr_gt.mx, selected_vcfr_fix.mx)
 
 ```
 
+# Calculate demographics:
+
+```{r}
+
+# mean age in cases and controls
+# Means and SDs
+phenotypes.df %>% 
+  group_by(group) %>% 
+  summarise(mean=mean(age),sd=sd(age))
+
+# calculate number of males and females
+# Means and SDs
+phenotypes.df %>% 
+  group_by(group, sex) %>% 
+  summarise(count=n())
+```
+
 # Save data
 
 ```{r}

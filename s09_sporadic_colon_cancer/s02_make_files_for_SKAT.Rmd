@@ -9,7 +9,7 @@ editor_options:
 ---
 
 **Started**: Alexey Larionov, 13Jul20 
-**Last updated**: Rofaida Desoki, 17Jul20
+**Last updated**: Rofaida Desoki, 20Jul20
 
 # Summary
 
@@ -64,6 +64,7 @@ dir.create(covars_sets_folder)
 
 # Required library (to write VCF)
 library(vcfR) 
+library(dplyr)
 
 ```
 
@@ -202,7 +203,56 @@ write.table(SetID.df, file = SetID_file,
             quote = FALSE, row.names = FALSE, col.names = FALSE)
 
 # Clean-up
-rm(SetID_file,covars_sets_folder)
+rm(SetID_file)
+
+```
+
+# Make pathway SetID
+
+```{r}
+
+# Function to assign pathway to a gene 
+get_pathway <- function(x){
+  MMR_genes <- c("MLH1", "MSH2", "MSH6", "PMS2", "MSH3", "PMS1", "EPCAM")
+  HDGC_genes <- c("CDH1", "CTNNA1", "MAP3K6", "MYD88")
+  pathway <- NA
+  if(x %in% MMR_genes){pathway <- "MMR"}
+  if(x %in% HDGC_genes){pathway <- "HDGC"}
+  return(pathway)
+}
+
+# Get pathways
+pathway <- unlist(lapply(variants.df$vep_SYMBOL,get_pathway))
+
+# Make a data-frame with pathways
+pathway_SetID.df <- data.frame(
+  pathway,
+  vep_SYMBOL=variants.df$vep_SYMBOL,
+  ID=variants.df$ID
+)
+
+# Check result
+dim(pathway_SetID.df)
+head(pathway_SetID.df)
+tail(pathway_SetID.df)
+sum(is.na(pathway_SetID.df))
+
+pathway_SetID.df %>% 
+  group_by(pathway,vep_SYMBOL) %>% 
+  summarise(num_var=n())
+
+# Remove gene name
+pathway_SetID.df <- pathway_SetID.df[,c("pathway","ID")]
+head(pathway_SetID.df)
+tail(pathway_SetID.df)
+
+# Write pathway setID file
+pathway_SetID_file <- file.path(covars_sets_folder,"pathway.SetID")
+write.table(pathway_SetID.df, file = pathway_SetID_file, 
+            quote = FALSE, row.names = FALSE, col.names = FALSE)
+
+# Clean-up
+rm(pathway,pathway_SetID_file,covars_sets_folder)
 
 ```
 
