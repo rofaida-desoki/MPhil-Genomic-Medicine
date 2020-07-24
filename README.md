@@ -4,7 +4,7 @@
 ## University of Cambridge
 
 ### Research Project:
-Exploring Cancer Predisposition in the 100,000 Genomes Project dataset
+Exploring Cancer Predisposition due to E-Cadherin-related and Mismatch Repair genes in the 100,000 Genomes Project dataset
 
 ### Study Aims:
 
