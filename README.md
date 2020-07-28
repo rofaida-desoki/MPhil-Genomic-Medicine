@@ -3,12 +3,13 @@
 ## MPhil in Genomic Medicine 2019-2020
 ## University of Cambridge
 
-### Research Project:
+### Research Project Title:
 Exploring Cancer Predisposition due to E-Cadherin-related and Mismatch Repair genes utilizing the 100,000 Genomes Project dataset
 
 ### Study Aims:
 
 The identification of germline variants predisposing to cancer plays an essential role in exploring the molecular pathogenesis of tumours and is a critical step towards the clinical management of affected families.
+
 The aim of this association analysis was to explore the 100K Genomes Project dataset for possible associations of germline variants in the selected cancer-associated pathways. 
 The implemented methods includes Burden and Variance-componenet analysis of aggregated variants per gene and aggregated analysis of MMR pathway and HDGC-associated genes.
 The 100K GP dataset provided a considerable amount of data and an equipped environment for the research purpose.
@@ -40,5 +41,5 @@ The selected cancer-associated pathways were as follows:
 9. Association analysis: Test for associations using SKAT library
 
 The repository was set-up to support the MPhil research project through providing the details of the project pipeline.
-The repository can be used by the public and it is adapted to the Genomics England research environment.
+The repository can be used by the public and it is adapted to the Genomics England Research Environment.
 
