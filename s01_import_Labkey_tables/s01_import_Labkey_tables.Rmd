@@ -1,9 +1,11 @@
 ---
 title: "Import tables from LabKey"
-output: 
+output:
+  word_document:
+    toc: yes
   html_document:
-    toc: true
-editor_options: 
+    toc: yes
+editor_options:
   chunk_output_type: console
 ---
 
